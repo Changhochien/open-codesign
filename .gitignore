@@ -1,0 +1,52 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+dist-electron/
+build/
+out/
+release/
+*.tsbuildinfo
+
+# Caches
+.turbo/
+.vite/
+.cache/
+.eslintcache
+.next/
+
+# Test outputs
+coverage/
+playwright-report/
+test-results/
+*.lcov
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Editor
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+pnpm-debug.log*
+
+# Local data
+.claude/workspace/
+*.local

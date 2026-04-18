@@ -1,0 +1,23 @@
+@import "@open-codesign/ui/tokens.css";
+@import "tailwindcss";
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  font-family: var(--font-sans);
+  background: var(--color-background);
+  color: var(--color-text-primary);
+  -webkit-font-smoothing: antialiased;
+}
+
+#root {
+  height: 100%;
+}
+
+code,
+kbd,
+pre {
+  font-family: var(--font-mono);
+}

@@ -1,0 +1,36 @@
+name: Feature request
+description: Propose a new capability
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before filing: search existing issues and read [`docs/VISION.md`](../blob/main/docs/VISION.md) and [`docs/ROADMAP.md`](../blob/main/docs/ROADMAP.md). If your idea contradicts a locked decision or anti-goal, open a Discussion instead.
+  - type: textarea
+    id: problem
+    attributes:
+      label: User problem
+      description: What user pain or unmet need motivates this? Don't propose a solution yet.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What you would build, at a high level.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: dropdown
+    id: complexity
+    attributes:
+      label: Complexity self-assessment
+      options:
+        - Tier 1 — simple, hardcoded version possible in <2 days
+        - Tier 2 — handles common cases, ~1 week
+        - Tier 3 — production-grade, multi-week
+    validations:
+      required: true
