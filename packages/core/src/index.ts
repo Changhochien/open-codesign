@@ -287,33 +287,62 @@ async function runModel(input: ModelRunInput): Promise<GenerateOutput> {
   log.info(`[${scope}] step=send_request`, ctx);
   const sendStart = Date.now();
   let result: GenerateResult;
-  const reasoning = reasoningForModel(input.model);
-  try {
-    result = await completeWithRetry(
-      input.model,
-      input.messages,
-      {
-        apiKey: input.apiKey,
-        ...(input.baseUrl !== undefined ? { baseUrl: input.baseUrl } : {}),
-        ...(input.signal !== undefined ? { signal: input.signal } : {}),
-        maxTokens: MAX_OUTPUT_TOKENS,
-        ...(reasoning !== undefined ? { reasoning } : {}),
-      },
-      {
-        ...(input.onRetry !== undefined ? { onRetry: input.onRetry } : {}),
-      },
-      complete,
-    );
-  } catch (err) {
-    const remapped = remapProviderError(err, input.model.provider);
-    log.error(`[${scope}] step=send_request.fail`, {
-      ...ctx,
-      ms: Date.now() - sendStart,
-      errorClass: err instanceof Error ? err.constructor.name : typeof err,
-      status: extractStatus(err),
-      code: remapped instanceof CodesignError ? remapped.code : undefined,
-    });
-    throw remapped;
+  let reasoning = reasoningForModel(input.model);
+  // Self-healing: if the upstream rejects on reasoning mismatch, flip the
+  // knob once and retry. Handles new reasoning-mandatory models (and
+  // not-supported models) without code changes.
+  for (let attempt = 1; ; attempt++) {
+    try {
+      result = await completeWithRetry(
+        input.model,
+        input.messages,
+        {
+          apiKey: input.apiKey,
+          ...(input.baseUrl !== undefined ? { baseUrl: input.baseUrl } : {}),
+          ...(input.signal !== undefined ? { signal: input.signal } : {}),
+          maxTokens: MAX_OUTPUT_TOKENS,
+          ...(reasoning !== undefined ? { reasoning } : {}),
+        },
+        {
+          ...(input.onRetry !== undefined ? { onRetry: input.onRetry } : {}),
+        },
+        complete,
+      );
+      break;
+    } catch (err) {
+      const adjustment = attempt === 1 ? reasoningMismatch(err, reasoning) : null;
+      if (adjustment === 'add') {
+        log.info(`[${scope}] step=send_request.retry_with_reasoning`, ctx);
+        input.onRetry?.({
+          attempt,
+          totalAttempts: attempt + 1,
+          delayMs: 0,
+          reason: 'reasoning required by upstream',
+        });
+        reasoning = 'medium';
+        continue;
+      }
+      if (adjustment === 'drop') {
+        log.info(`[${scope}] step=send_request.retry_without_reasoning`, ctx);
+        input.onRetry?.({
+          attempt,
+          totalAttempts: attempt + 1,
+          delayMs: 0,
+          reason: 'reasoning not supported by upstream',
+        });
+        reasoning = undefined;
+        continue;
+      }
+      const remapped = remapProviderError(err, input.model.provider);
+      log.error(`[${scope}] step=send_request.fail`, {
+        ...ctx,
+        ms: Date.now() - sendStart,
+        errorClass: err instanceof Error ? err.constructor.name : typeof err,
+        status: extractStatus(err),
+        code: remapped instanceof CodesignError ? remapped.code : undefined,
+      });
+      throw remapped;
+    }
   }
   log.info(`[${scope}] step=send_request.ok`, { ...ctx, ms: Date.now() - sendStart });
 
@@ -369,6 +398,49 @@ function extractStatus(err: unknown): number | undefined {
   return undefined;
 }
 
+/** Detect upstream-error messages that indicate a reasoning-knob mismatch.
+ *  Phrases vary across upstreams (OpenRouter, Anthropic, OpenAI, Vertex, etc.),
+ *  so use broad patterns over a long alternation rather than chasing exact
+ *  strings — false positives only cost one extra request, false negatives
+ *  surface to the user as an opaque 400. */
+const REASONING_REQUIRED_PATTERNS = [
+  /reasoning is mandatory/i,
+  /reasoning is required/i,
+  /requires reasoning/i,
+  /thinking is mandatory/i,
+  /thinking is required/i,
+  /must (?:enable|provide|include) (?:reasoning|thinking)/i,
+];
+const REASONING_UNSUPPORTED_PATTERNS = [
+  /does(?:n't| not) support (?:reasoning|thinking)/i,
+  /(?:reasoning|thinking)(?: is)? not supported/i,
+  /(?:reasoning|thinking)(?: is)? unsupported/i,
+  /unknown (?:parameter|field).*reasoning/i,
+  /unexpected (?:parameter|field).*reasoning/i,
+  /(?:reasoning|thinking).*not allowed/i,
+];
+
+function errorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === 'string') return err;
+  return '';
+}
+
+function reasoningMismatch(
+  err: unknown,
+  sentReasoning: ReasoningLevel | undefined,
+): 'add' | 'drop' | null {
+  if (extractStatus(err) !== 400) return null;
+  const msg = errorMessage(err);
+  if (sentReasoning === undefined && REASONING_REQUIRED_PATTERNS.some((p) => p.test(msg))) {
+    return 'add';
+  }
+  if (sentReasoning !== undefined && REASONING_UNSUPPORTED_PATTERNS.some((p) => p.test(msg))) {
+    return 'drop';
+  }
+  return null;
+}
+
 // Skill loading is best-effort: a missing or unreadable builtin directory must
 // not block generation, but the failure must surface (logged at error level
 // AND returned as a warning so the UI can show it). This honours
@@ -418,6 +490,21 @@ const CLAUDE_4_MODEL_RE = /claude-(?:opus|sonnet)-4/i;
 /** OpenAI reasoning families (o-series and gpt-5). Anchored to the start of
  *  the modelId so a tenant prefix or pass-through path can't sneak through. */
 const OPENAI_REASONING_MODEL_RE = /^(?:o1|o3|o4|gpt-5)(?:[-.].*)?$/i;
+/** OpenRouter reasoning-mandatory model ids. These endpoints reject requests
+ *  that do not declare a reasoning level (HTTP 400), so we MUST send one.
+ *  Patterns are anchored to the org-prefix slugs OpenRouter uses; the explicit
+ *  `:thinking` suffix covers Anthropic's thinking variants exposed via OR. */
+const OPENROUTER_REASONING_MODEL_RE = new RegExp(
+  [
+    ':thinking$',
+    '^anthropic/claude-(?:opus|sonnet)-4',
+    '^openai/(?:o1|o3|o4|gpt-5)(?:[-.].*)?$',
+    '^minimax/minimax-m\\d',
+    '^deepseek/deepseek-r\\d',
+    '^qwen/qwq',
+  ].join('|'),
+  'i',
+);
 
 function reasoningForModel(model: ModelRef): ReasoningLevel | undefined {
   // Whitelist by (provider, modelId) pair. Substring matches across providers
@@ -431,8 +518,14 @@ function reasoningForModel(model: ModelRef): ReasoningLevel | undefined {
       return CLAUDE_4_MODEL_RE.test(model.modelId) ? 'high' : undefined;
     case 'openai':
       return OPENAI_REASONING_MODEL_RE.test(model.modelId) ? 'high' : undefined;
+    case 'openrouter':
+      // OpenRouter rejects reasoning-mandatory endpoints with 400 when no
+      // reasoning level is declared. Use 'medium' (not 'high') as the default
+      // — pi-ai may translate the knob differently across upstreams, and
+      // 'medium' is a safer landing zone for unknown reasoning back-ends.
+      return OPENROUTER_REASONING_MODEL_RE.test(model.modelId) ? 'medium' : undefined;
     default:
-      // openrouter, groq, cerebras, xai, mistral, bedrock, azure, vercel-ai-gateway:
+      // groq, cerebras, xai, mistral, bedrock, azure, vercel-ai-gateway:
       // all pass-through or multi-tenant. Even if they serve a reasoning model,
       // we cannot trust the model id alone, and pi-ai will silently drop or
       // mistranslate the reasoning knob. Stay conservative.

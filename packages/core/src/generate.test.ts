@@ -209,7 +209,7 @@ describe('generate()', () => {
     expect(opts.reasoning).toBeUndefined();
   });
 
-  it('omits reasoning for OpenRouter pass-through claude-4 (cannot trust pass-through ids)', async () => {
+  it('passes reasoning=medium for OpenRouter pass-through claude-4 (reasoning-mandatory upstream)', async () => {
     completeMock.mockResolvedValueOnce({
       content: RESPONSE,
       inputTokens: 0,
@@ -221,6 +221,63 @@ describe('generate()', () => {
       prompt: 'design a meditation app',
       history: [],
       model: { provider: 'openrouter', modelId: 'anthropic/claude-sonnet-4' },
+      apiKey: 'sk-test',
+    });
+
+    const opts = completeMock.mock.calls[0]?.[2] as { reasoning?: string };
+    expect(opts.reasoning).toBe('medium');
+  });
+
+  it('passes reasoning=medium for OpenRouter minimax-m series (reasoning-mandatory)', async () => {
+    completeMock.mockResolvedValueOnce({
+      content: RESPONSE,
+      inputTokens: 0,
+      outputTokens: 0,
+      costUsd: 0,
+    });
+
+    await generate({
+      prompt: 'design a meditation app',
+      history: [],
+      model: { provider: 'openrouter', modelId: 'minimax/minimax-m2.5:free' },
+      apiKey: 'sk-test',
+    });
+
+    const opts = completeMock.mock.calls[0]?.[2] as { reasoning?: string };
+    expect(opts.reasoning).toBe('medium');
+  });
+
+  it('passes reasoning=medium for any OpenRouter model with :thinking suffix', async () => {
+    completeMock.mockResolvedValueOnce({
+      content: RESPONSE,
+      inputTokens: 0,
+      outputTokens: 0,
+      costUsd: 0,
+    });
+
+    await generate({
+      prompt: 'design a meditation app',
+      history: [],
+      model: { provider: 'openrouter', modelId: 'qwen/qwen3-coder:thinking' },
+      apiKey: 'sk-test',
+    });
+
+    const opts = completeMock.mock.calls[0]?.[2] as { reasoning?: string };
+    expect(opts.reasoning).toBe('medium');
+  });
+
+  it('omits reasoning for OpenRouter non-reasoning model (e.g. claude-3.5-sonnet)', async () => {
+    completeMock.mockResolvedValueOnce({
+      content: RESPONSE,
+      inputTokens: 0,
+      outputTokens: 0,
+      costUsd: 0,
+    });
+
+    await generate({
+      prompt: 'design a meditation app',
+      history: [],
+      model: { provider: 'openrouter', modelId: 'anthropic/claude-3.5-sonnet' },
       apiKey: 'sk-test',
     });
 
@@ -245,6 +302,80 @@ describe('generate()', () => {
 
     const opts = completeMock.mock.calls[0]?.[2] as { reasoning?: string };
     expect(opts.reasoning).toBeUndefined();
+  });
+
+  it('auto-retries with reasoning=medium when upstream returns 400 "Reasoning is mandatory"', async () => {
+    const err = Object.assign(
+      new Error('400 Reasoning is mandatory for this endpoint and cannot be disabled.'),
+      { status: 400 },
+    );
+    completeMock.mockRejectedValueOnce(err);
+    completeMock.mockResolvedValueOnce({
+      content: RESPONSE,
+      inputTokens: 1,
+      outputTokens: 1,
+      costUsd: 0,
+    });
+
+    const result = await generate({
+      prompt: 'design a meditation app',
+      history: [],
+      // Unknown reasoning model not on the static whitelist — first attempt
+      // sends no reasoning, upstream rejects, second attempt adds 'medium'.
+      model: { provider: 'openrouter', modelId: 'novel-lab/some-new-thinker' },
+      apiKey: 'sk-test',
+    });
+
+    expect(completeMock).toHaveBeenCalledTimes(2);
+    const first = completeMock.mock.calls[0]?.[2] as { reasoning?: string };
+    const second = completeMock.mock.calls[1]?.[2] as { reasoning?: string };
+    expect(first.reasoning).toBeUndefined();
+    expect(second.reasoning).toBe('medium');
+    expect(result.artifacts).toHaveLength(1);
+  });
+
+  it('auto-retries without reasoning when upstream returns 400 "reasoning not supported"', async () => {
+    const err = Object.assign(new Error('400 reasoning is not supported by this model'), {
+      status: 400,
+    });
+    completeMock.mockRejectedValueOnce(err);
+    completeMock.mockResolvedValueOnce({
+      content: RESPONSE,
+      inputTokens: 1,
+      outputTokens: 1,
+      costUsd: 0,
+    });
+
+    const result = await generate({
+      prompt: 'design a meditation app',
+      history: [],
+      // Whitelisted as reasoning-mandatory, so first attempt sends 'medium';
+      // if upstream changes its mind, drop the knob on retry.
+      model: { provider: 'openrouter', modelId: 'minimax/minimax-m2.5:free' },
+      apiKey: 'sk-test',
+    });
+
+    expect(completeMock).toHaveBeenCalledTimes(2);
+    const first = completeMock.mock.calls[0]?.[2] as { reasoning?: string };
+    const second = completeMock.mock.calls[1]?.[2] as { reasoning?: string };
+    expect(first.reasoning).toBe('medium');
+    expect(second.reasoning).toBeUndefined();
+    expect(result.artifacts).toHaveLength(1);
+  });
+
+  it('does not retry on a 400 unrelated to reasoning', async () => {
+    const err = Object.assign(new Error('400 invalid model'), { status: 400 });
+    completeMock.mockRejectedValueOnce(err);
+
+    await expect(
+      generate({
+        prompt: 'design a meditation app',
+        history: [],
+        model: { provider: 'openrouter', modelId: 'novel-lab/some-new-thinker' },
+        apiKey: 'sk-test',
+      }),
+    ).rejects.toThrow();
+    expect(completeMock).toHaveBeenCalledTimes(1);
   });
 
   it('passes reasoning=high for Anthropic claude-opus-4-7 (first-party provider)', async () => {
