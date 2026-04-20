@@ -703,11 +703,7 @@ function ProviderCard({
               <AlertTriangle className="w-2.5 h-2.5" />
               {t('settings.providers.missingKey')}
             </span>
-          ) : (
-            <code className="text-[var(--text-xs)] text-[var(--color-text-muted)] font-mono">
-              {row.maskedKey}
-            </code>
-          )}
+          ) : null}
           {row.baseUrl && (
             <span className="flex items-center gap-1 text-[var(--text-xs)] text-[var(--color-text-muted)] min-w-0">
               <Globe className="w-3 h-3 shrink-0" />
