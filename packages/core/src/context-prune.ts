@@ -130,8 +130,7 @@ function stubAssistantToolCalls(m: AgentMessage): AgentMessage {
 
 function applyWindow(messages: AgentMessage[], keep: number): AgentMessage[] {
   const roundIdxs = findToolUseRoundIndices(messages);
-  const firstKeptRoundIdx =
-    roundIdxs.length > keep ? (roundIdxs[roundIdxs.length - keep] ?? 0) : 0;
+  const firstKeptRoundIdx = roundIdxs.length > keep ? (roundIdxs[roundIdxs.length - keep] ?? 0) : 0;
   return messages.map((m, i) => {
     if (i >= firstKeptRoundIdx) return m; // inside the window — keep verbatim
     if (isToolResult(m)) return stubToolResult(m);

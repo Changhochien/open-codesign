@@ -47,23 +47,20 @@ describe('buildTransformContext — sliding-window compaction', () => {
     expect(out).toEqual(messages);
   });
 
-  it('leaves the last 8 tool-use rounds verbatim, stubs older toolResult content', async () => {
+  it('leaves the last N tool-use rounds verbatim, stubs older toolResult content', async () => {
     const transform = buildTransformContext();
     const messages: AgentMessage[] = [userMsg('build this')];
-    // 12 tool-use rounds, each with a bulky toolResult body so older ones
-    // should be stubbed.
     const bulk = 'x'.repeat(2_000);
-    for (let i = 0; i < 12; i += 1) {
+    // 10 rounds — default window is 6, so first ~4 should be compacted.
+    for (let i = 0; i < 10; i += 1) {
       messages.push(assistantWithToolCall(`t${i}`, `args-${i}`));
       messages.push(toolResult(`t${i}`, `result body ${i} ${bulk}`));
     }
     const out = await transform(messages);
-    // First few toolResult rows should be stubbed, last 8 should still be
-    // original-shaped.
     const resultRows = out.filter((m) => m.role === 'toolResult');
-    expect(resultRows).toHaveLength(12);
-    const early = resultRows.slice(0, 4);
-    const recent = resultRows.slice(-8);
+    expect(resultRows).toHaveLength(10);
+    const early = resultRows.slice(0, 3);
+    const recent = resultRows.slice(-6);
     for (const row of early) {
       const first = (row as { content: Array<{ text?: string }> }).content[0]?.text ?? '';
       expect(first.startsWith('[dropped')).toBe(true);
@@ -72,6 +69,33 @@ describe('buildTransformContext — sliding-window compaction', () => {
       const first = (row as { content: Array<{ text?: string }> }).content[0]?.text ?? '';
       expect(first.startsWith('result body')).toBe(true);
     }
+  });
+
+  it('compacts assistant.toolCall.input on old rounds but preserves name + id', async () => {
+    const transform = buildTransformContext();
+    const messages: AgentMessage[] = [userMsg('build')];
+    const bulk = 'a'.repeat(4_000);
+    // 10 rounds with big toolCall args — older ones should have args summarized.
+    for (let i = 0; i < 10; i += 1) {
+      messages.push(assistantWithToolCall(`call-${i}`, bulk));
+      messages.push(toolResult(`call-${i}`, 'ok'));
+    }
+    const out = await transform(messages);
+    // Oldest assistant message's toolCall block should have summarized input.
+    const oldest = out.find(
+      (m) =>
+        m.role === 'assistant' &&
+        Array.isArray((m as { content?: unknown }).content) &&
+        (m as { content: Array<{ type?: string; id?: string }> }).content.some(
+          (c) => c?.id === 'call-0',
+        ),
+    ) as { content: Array<{ id?: string; name?: string; input?: unknown }> } | undefined;
+    expect(oldest).toBeDefined();
+    const tc = oldest?.content.find((c) => c.id === 'call-0');
+    expect(tc?.name).toBe('str_replace_based_edit_tool');
+    const input = tc?.input as { _summarized?: boolean; _origBytes?: number } | undefined;
+    expect(input?._summarized).toBe(true);
+    expect(input?._origBytes).toBeGreaterThan(1_000);
   });
 
   it('keeps the toolCallId on stubbed toolResult rows (pi-ai shape requirement)', async () => {
@@ -83,8 +107,6 @@ describe('buildTransformContext — sliding-window compaction', () => {
       messages.push(toolResult(`call-${i}`, `body ${bulk}`));
     }
     const out = await transform(messages);
-    // Oldest round's toolResult must still carry the matching toolCallId so
-    // the LLM can pair it with the assistant toolCall block.
     const first = out.find(
       (m) => m.role === 'toolResult' && (m as { toolCallId?: string }).toolCallId === 'call-0',
     ) as { toolCallId?: string; content: Array<{ text?: string }> } | undefined;
@@ -96,48 +118,46 @@ describe('buildTransformContext — sliding-window compaction', () => {
   it('preserves user messages and assistant-text messages unchanged', async () => {
     const transform = buildTransformContext();
     const bulk = 'z'.repeat(3_000);
-    const messages: AgentMessage[] = [
-      userMsg('initial brief, do not mangle'),
-      assistantText('I will start now.'),
-    ];
+    const openingUser = userMsg('initial brief, do not mangle');
+    const openingNote = assistantText('I will start now.');
+    const messages: AgentMessage[] = [openingUser, openingNote];
     for (let i = 0; i < 10; i += 1) {
       messages.push(assistantWithToolCall(`c${i}`, 'op'));
       messages.push(toolResult(`c${i}`, `r ${bulk}`));
     }
     messages.push(assistantText('final summary line'));
     const out = await transform(messages);
-    // User message identity preserved.
-    const firstUser = out.find((m) => m.role === 'user');
-    expect(firstUser).toBe(messages[0]);
-    // Non-tool-call assistant text preserved.
-    const openingNote = out.find(
+    expect(out.find((m) => m.role === 'user')).toBe(openingUser);
+    const textOnlyAssistants = out.filter(
       (m) =>
         m.role === 'assistant' &&
-        (m as { content: Array<{ type: string; text?: string }> }).content.every(
-          (c) => c.type === 'text',
-        ),
+        (m as { content: Array<{ type: string }> }).content.every((c) => c.type === 'text'),
     );
-    expect(openingNote).toBeDefined();
+    expect(textOnlyAssistants.length).toBeGreaterThanOrEqual(2);
   });
 
-  it('tightens to the aggressive 4-round window when HARD_CAP_BYTES is exceeded', async () => {
+  it('tightens to the aggressive window when HARD_CAP_BYTES is exceeded', async () => {
     const transform = buildTransformContext();
     const messages: AgentMessage[] = [userMsg('go')];
-    // Stuff assistant content with very large payloads so even after stubbing
-    // older toolResults the total still exceeds the 300 KB cap.
     const hugeArgs = 'p'.repeat(40_000);
-    for (let i = 0; i < 12; i += 1) {
+    for (let i = 0; i < 10; i += 1) {
       messages.push(assistantWithToolCall(`big-${i}`, hugeArgs));
       messages.push(toolResult(`big-${i}`, 'small-response'));
     }
     const out = await transform(messages);
-    // In aggressive mode only the last 4 toolResult rows stay verbatim. Even
-    // though the results are small here, we just verify the stub count rose:
-    // older-than-last-4 rows should all be stubbed.
-    const results = out.filter((m) => m.role === 'toolResult');
-    const stubbed = results.filter((m) =>
-      ((m as { content: Array<{ text?: string }> }).content[0]?.text ?? '').startsWith('[dropped'),
-    );
-    expect(stubbed.length).toBeGreaterThanOrEqual(8);
+    // In aggressive mode only the last 3 rounds stay verbatim. Count
+    // assistant toolCall blocks with summarized input.
+    let summarizedCount = 0;
+    for (const m of out) {
+      if (m.role !== 'assistant') continue;
+      const content = (m as { content: Array<{ type?: string; input?: unknown }> }).content;
+      for (const c of content) {
+        if (c.type === 'toolCall') {
+          const input = c.input as { _summarized?: boolean } | undefined;
+          if (input?._summarized === true) summarizedCount += 1;
+        }
+      }
+    }
+    expect(summarizedCount).toBeGreaterThanOrEqual(7);
   });
 });
