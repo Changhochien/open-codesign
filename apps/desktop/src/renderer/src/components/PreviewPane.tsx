@@ -12,10 +12,10 @@ import { ErrorState } from '../preview/ErrorState';
 import { LoadingState } from '../preview/LoadingState';
 import { useCodesignStore } from '../store';
 import { CanvasErrorBar } from './CanvasErrorBar';
-import { CommentBubble } from './comment/CommentBubble';
-import { PinOverlay } from './comment/PinOverlay';
 import { PhoneFrame } from './PhoneFrame';
 import { PreviewToolbar } from './PreviewToolbar';
+import { CommentBubble } from './comment/CommentBubble';
+import { PinOverlay } from './comment/PinOverlay';
 
 export interface PreviewPaneProps {
   onPickStarter: (prompt: string) => void;

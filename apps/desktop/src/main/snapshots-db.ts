@@ -744,9 +744,7 @@ export function updateComment(
     return row ? rowToComment(row) : null;
   }
   values.push(id);
-  const result = db
-    .prepare(`UPDATE comments SET ${fields.join(', ')} WHERE id = ?`)
-    .run(...values);
+  const result = db.prepare(`UPDATE comments SET ${fields.join(', ')} WHERE id = ?`).run(...values);
   if (result.changes === 0) return null;
   const row = db.prepare('SELECT * FROM comments WHERE id = ?').get(id) as CommentRowDb;
   return rowToComment(row);
@@ -757,11 +755,7 @@ export function deleteComment(db: Database, id: string): boolean {
   return result.changes > 0;
 }
 
-export function markCommentsApplied(
-  db: Database,
-  ids: string[],
-  snapshotId: string,
-): CommentRow[] {
+export function markCommentsApplied(db: Database, ids: string[], snapshotId: string): CommentRow[] {
   if (ids.length === 0) return [];
   const tx = db.transaction(() => {
     const stmt = db.prepare(

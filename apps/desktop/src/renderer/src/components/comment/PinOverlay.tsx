@@ -1,5 +1,5 @@
-import type { CommentRow } from '@open-codesign/shared';
 import { useT } from '@open-codesign/i18n';
+import type { CommentRow } from '@open-codesign/shared';
 
 export interface PinOverlayProps {
   /** Comments filtered to the currently-viewed snapshot. */
@@ -47,10 +47,7 @@ export function variantFor(comment: CommentRow): PinVariant {
   };
 }
 
-export function pinStyle(
-  comment: CommentRow,
-  zoom: number,
-): { top: string; left: string } {
+export function pinStyle(comment: CommentRow, zoom: number): { top: string; left: string } {
   const scale = zoom / 100;
   const top = comment.rect.top * scale - 12;
   const left = comment.rect.left * scale + comment.rect.width * scale - 12;

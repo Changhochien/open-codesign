@@ -49,10 +49,7 @@ export function CommentsTabContent() {
         return (
           <section key={group.label} className="space-y-[var(--space-2)]">
             <h3 className="flex items-center gap-[var(--space-1_5)] text-[var(--text-2xs)] font-medium uppercase tracking-wide text-[var(--color-text-muted)]">
-              <Icon
-                className="h-[var(--size-icon-xs)] w-[var(--size-icon-xs)]"
-                aria-hidden
-              />
+              <Icon className="h-[var(--size-icon-xs)] w-[var(--size-icon-xs)]" aria-hidden />
               {group.label}
               <span className="ml-[var(--space-1)] text-[var(--color-text-muted)]">
                 {group.rows.length}

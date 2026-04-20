@@ -795,10 +795,7 @@ export function buildEnrichedPrompt(
   pendingEdits: Array<{ selector: string; tag: string; outerHTML: string; text: string }>,
 ): string {
   if (pendingEdits.length === 0) return userPrompt;
-  const lines: string[] = [
-    'The user has pinned these elements and requested these changes:',
-    '',
-  ];
+  const lines: string[] = ['The user has pinned these elements and requested these changes:', ''];
   pendingEdits.forEach((edit, i) => {
     const html = edit.outerHTML.length > 280 ? `${edit.outerHTML.slice(0, 280)}…` : edit.outerHTML;
     lines.push(`${i + 1}. [element: ${edit.tag} — ${edit.selector}]`);
@@ -994,13 +991,10 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
 
     // Pending edit chips let the user submit with an empty prompt — we
     // substitute a default trailer so buildPromptRequest still passes.
-    const pendingEdits = get().comments.filter(
-      (c) => c.kind === 'edit' && c.status === 'pending',
-    );
+    const pendingEdits = get().comments.filter((c) => c.kind === 'edit' && c.status === 'pending');
     const trimmedInput = input.prompt.trim();
     if (trimmedInput.length === 0 && pendingEdits.length === 0) return;
-    const effectivePrompt =
-      trimmedInput.length === 0 ? 'Apply the pending changes.' : trimmedInput;
+    const effectivePrompt = trimmedInput.length === 0 ? 'Apply the pending changes.' : trimmedInput;
 
     const request = buildPromptRequest(
       { ...input, prompt: effectivePrompt },
@@ -1069,15 +1063,10 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
           const snaps = await window.codesign.snapshots.list(designIdAtStart);
           const appliedIn = snaps[0]?.id ?? null;
           if (appliedIn) {
-            const updated = await window.codesign.comments.markApplied(
-              pendingEditIds,
-              appliedIn,
-            );
+            const updated = await window.codesign.comments.markApplied(pendingEditIds, appliedIn);
             if (get().currentDesignId === designIdAtStart && updated.length > 0) {
               set((s) => ({
-                comments: s.comments.map(
-                  (c) => updated.find((u) => u.id === c.id) ?? c,
-                ),
+                comments: s.comments.map((c) => updated.find((u) => u.id === c.id) ?? c),
                 currentSnapshotId: appliedIn,
               }));
             }

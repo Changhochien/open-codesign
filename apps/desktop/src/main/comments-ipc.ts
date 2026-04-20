@@ -13,6 +13,8 @@ import type {
 } from '@open-codesign/shared';
 import { CodesignError } from '@open-codesign/shared';
 import type BetterSqlite3 from 'better-sqlite3';
+import { ipcMain } from './electron-runtime';
+import { getLogger } from './logger';
 import {
   createComment,
   deleteComment,
@@ -21,8 +23,6 @@ import {
   markCommentsApplied,
   updateComment,
 } from './snapshots-db';
-import { ipcMain } from './electron-runtime';
-import { getLogger } from './logger';
 
 type Database = BetterSqlite3.Database;
 
@@ -44,11 +44,7 @@ function asObject(raw: unknown, channel: string): Record<string, unknown> {
   return raw as Record<string, unknown>;
 }
 
-function parseNonEmptyString(
-  r: Record<string, unknown>,
-  field: string,
-  channel: string,
-): string {
+function parseNonEmptyString(r: Record<string, unknown>, field: string, channel: string): string {
   const v = r[field];
   if (typeof v !== 'string' || v.trim().length === 0) {
     throw new CodesignError(`${channel}: ${field} must be a non-empty string`, 'IPC_BAD_INPUT');
@@ -156,13 +152,10 @@ export function registerCommentsIpc(db: Database): void {
       : listComments(db, designId);
   });
 
-  ipcMain.handle(
-    'comments:v1:list-pending-edits',
-    (_e: unknown, raw: unknown): CommentRow[] => {
-      const designId = parseDesignId(raw, 'comments:v1:list-pending-edits');
-      return listPendingEdits(db, designId);
-    },
-  );
+  ipcMain.handle('comments:v1:list-pending-edits', (_e: unknown, raw: unknown): CommentRow[] => {
+    const designId = parseDesignId(raw, 'comments:v1:list-pending-edits');
+    return listPendingEdits(db, designId);
+  });
 
   ipcMain.handle('comments:v1:update', (_e: unknown, raw: unknown): CommentRow | null => {
     const channel = 'comments:v1:update';
