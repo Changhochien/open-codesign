@@ -632,6 +632,7 @@ function applyGenerateSuccess(
     outputTokens?: number;
     costUsd?: number;
   },
+  designIdAtStart: string | null,
 ): void {
   const firstArtifact = result.artifacts[0];
   const assistantMessage = result.message || tr('common.done');
@@ -654,7 +655,12 @@ function applyGenerateSuccess(
     };
   });
   if (didApply) {
-    const designId = get().currentDesignId;
+    // Prefer the designId captured when the prompt was sent — if the user
+    // switched designs mid-generation, get().currentDesignId would now point
+    // at the new one and we'd write the artifact + assistant text into the
+    // wrong chat. Fall back to current only when caller didn't pass one
+    // (legacy paths).
+    const designId = designIdAtStart ?? get().currentDesignId;
     if (designId) {
       const artifact = artifactFromResult(firstArtifact, prompt, assistantMessage);
       void persistDesignState(get, designId, get().messages, get().previewHtml, artifact);
@@ -739,6 +745,7 @@ async function runGenerate(
   set: SetState,
   generationId: string,
   payload: Parameters<CodesignApi['generate']>[0],
+  designIdAtStart: string | null,
 ): Promise<void> {
   advanceStageIfCurrent(get, set, generationId, 'thinking');
   // Enter streaming stage before the IPC call so the UI shows "receiving response"
@@ -762,6 +769,7 @@ async function runGenerate(
       outputTokens?: number;
       costUsd?: number;
     },
+    designIdAtStart,
   );
 }
 
@@ -1049,7 +1057,7 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
         ...(request.referenceUrl ? { referenceUrl: request.referenceUrl } : {}),
         attachments: request.attachments,
         generationId,
-      });
+      }, designIdAtStart);
       // After a successful generate, persistDesignState (called inside
       // applyGenerateSuccess) creates the new snapshot and updates
       // currentSnapshotId via loadCommentsForCurrentDesign. Mark any pending

@@ -90,7 +90,7 @@ export function Sidebar({ prompt, setPrompt, onSubmit }: SidebarProps) {
 
   return (
     <aside
-      className="flex flex-col border-r border-[var(--color-border)] bg-[var(--color-background-secondary)]"
+      className="flex flex-col overflow-x-hidden border-r border-[var(--color-border)] bg-[var(--color-background-secondary)]"
       style={{ minHeight: 0, minWidth: 0 }}
       aria-label={t('sidebar.ariaLabel')}
     >

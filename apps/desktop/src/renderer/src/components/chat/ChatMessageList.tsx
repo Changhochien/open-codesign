@@ -165,7 +165,7 @@ export function ChatMessageList({ messages, loading, empty }: ChatMessageListPro
       items.push({
         key: `err-${msg.seq}`,
         node: (
-          <div className="rounded-[var(--radius-md)] border border-[var(--color-danger,_#c53030)] bg-[var(--color-surface)] px-[var(--space-3)] py-[var(--space-2)] text-[var(--text-xs)] text-[var(--color-text-primary)]">
+          <div className="rounded-[var(--radius-md)] border border-[var(--color-danger,_#c53030)] bg-[var(--color-surface)] px-[var(--space-3)] py-[var(--space-2)] text-[var(--text-xs)] text-[var(--color-text-primary)] break-all whitespace-pre-wrap">
             {p?.message ?? t('errors.unknown')}
           </div>
         ),
