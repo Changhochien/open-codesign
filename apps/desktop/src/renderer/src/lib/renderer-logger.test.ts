@@ -152,4 +152,16 @@ describe('installRendererLogBridge', () => {
     }).not.toThrow();
     expect(logSpy).toHaveBeenCalledTimes(1);
   });
+
+  it('truncates oversized payloads with a length marker', async () => {
+    const { installRendererLogBridge } = await import('./renderer-logger');
+    installRendererLogBridge();
+
+    const huge = { blob: 'x'.repeat(50_000) };
+    console.error('[store]', huge);
+
+    const entry = logSpy.mock.calls[0]?.[0] as { message: string } | undefined;
+    expect(entry?.message).toContain('…[truncated');
+    expect(entry?.message.length).toBeLessThan(10_000);
+  });
 });

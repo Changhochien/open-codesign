@@ -426,6 +426,12 @@ function registerIpcHandlers(): void {
   ipcMain.handle('codesign:v1:generate', async (_e, raw: unknown) => {
     const payload = GeneratePayloadV1.parse(raw);
     const id = payload.generationId;
+    // `withRun` binds `id` as the AsyncLocalStorage runId so every log line
+    // emitted through `getLogger()` inside this handler (and every awaited
+    // call it transitively makes, including `armTimeout`'s setTimeout) carries
+    // the same runId. See `runContext.ts`. The manual `generationId: id`
+    // fields kept below are the pre-ALS convention and are retained
+    // non-destructively; future PRs may drop them once tooling reads runId.
     return withRun(id, async () => {
       const controller = new AbortController();
       inFlight.set(id, controller);

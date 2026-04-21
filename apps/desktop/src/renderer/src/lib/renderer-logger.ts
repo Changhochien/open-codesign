@@ -61,7 +61,17 @@ function safeStringify(value: unknown): string {
     return String(value);
   }
   try {
-    return JSON.stringify(value, makeReplacer());
+    const serialized = JSON.stringify(value, makeReplacer());
+    if (serialized === undefined) return '[unserializable]';
+    // Cap per-arg size so `console.error(hugeDomNode)` cannot balloon a
+    // log line (and the main-process IPC payload). 8 KB is enough for any
+    // structured triage payload; larger values are truncated with a tail
+    // that records the original length so reviewers know data was cut.
+    const MAX_LEN = 8 * 1024;
+    if (serialized.length > MAX_LEN) {
+      return `${serialized.slice(0, MAX_LEN)}…[truncated, original ${serialized.length} bytes]`;
+    }
+    return serialized;
   } catch {
     return '[unserializable]';
   }
