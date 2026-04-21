@@ -147,6 +147,26 @@ describe('assertProviderHasStoredSecret', () => {
 
     expect(() => assertProviderHasStoredSecret(cfg, 'codex-proxy')).not.toThrow();
   });
+
+  it('throws for imported Codex providers that require a stored API key', () => {
+    const cfg = makeCfg({
+      provider: 'codex-custom',
+      modelPrimary: 'gpt-5.4',
+      providers: {
+        'codex-custom': {
+          id: 'codex-custom',
+          name: 'Codex (imported)',
+          builtin: false,
+          wire: 'openai-responses',
+          baseUrl: 'https://api.duckcoding.ai/v1',
+          defaultModel: 'gpt-5.4',
+          requiresApiKey: true,
+        },
+      },
+    });
+
+    expect(() => assertProviderHasStoredSecret(cfg, 'codex-custom')).toThrow(CodesignError);
+  });
 });
 
 describe('computeDeleteProviderResult', () => {
@@ -317,5 +337,31 @@ describe('resolveActiveModel', () => {
 
     expect(result.model).toEqual({ provider: 'codex-proxy', modelId: 'gpt-5.3-codex' });
     expect(result.baseUrl).toBe('https://proxy.example.com/v1');
+    expect(result.allowKeyless).toBe(true);
+  });
+
+  it('throws for active imported Codex providers that require a stored secret', () => {
+    const cfg = makeCfg({
+      provider: 'codex-custom',
+      modelPrimary: 'gpt-5.4',
+      providers: {
+        'codex-custom': {
+          id: 'codex-custom',
+          name: 'Codex (imported)',
+          builtin: false,
+          wire: 'openai-responses',
+          baseUrl: 'https://api.duckcoding.ai/v1',
+          defaultModel: 'gpt-5.4',
+          requiresApiKey: true,
+        },
+      },
+    });
+
+    expect(() =>
+      resolveActiveModel(cfg, {
+        provider: 'codex-custom',
+        modelId: 'gpt-5.4',
+      }),
+    ).toThrowError(CodesignError);
   });
 });

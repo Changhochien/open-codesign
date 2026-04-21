@@ -1,5 +1,8 @@
+import { mkdir, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { parseCodexConfig } from './codex-config';
+import { parseCodexConfig, readCodexConfig } from './codex-config';
 
 describe('parseCodexConfig', () => {
   it('returns empty providers on empty TOML', async () => {
@@ -46,6 +49,17 @@ wire_api = "responses"
     expect(out.providers[0]?.defaultModel).toBe('gpt-4o');
   });
 
+  it('marks Codex providers that require OpenAI auth', async () => {
+    const toml = `
+[model_providers.custom]
+base_url = "https://api.duckcoding.ai/v1"
+wire_api = "responses"
+requires_openai_auth = true
+`;
+    const out = await parseCodexConfig(toml);
+    expect(out.providers[0]?.requiresApiKey).toBe(true);
+  });
+
   it('uses provider-local model when a non-active provider declares one', async () => {
     const toml = `
 model = "deepseek-chat"
@@ -87,5 +101,33 @@ base_url = "https://proxy.anthropic.example.com"
 `;
     const out = await parseCodexConfig(toml);
     expect(out.providers[0]?.wire).toBe('anthropic');
+  });
+});
+
+describe('readCodexConfig', () => {
+  it('reads OPENAI_API_KEY from Codex auth.json for providers requiring OpenAI auth', async () => {
+    const home = join(tmpdir(), `open-codesign-codex-${Date.now()}-${Math.random()}`);
+    const codexDir = join(home, '.codex');
+    await mkdir(codexDir, { recursive: true });
+    await writeFile(
+      join(codexDir, 'config.toml'),
+      `
+model_provider = "custom"
+model = "gpt-5.4"
+
+[model_providers.custom]
+base_url = "https://api.duckcoding.ai/v1"
+wire_api = "responses"
+requires_openai_auth = true
+`,
+      'utf8',
+    );
+    await writeFile(join(codexDir, 'auth.json'), '{"OPENAI_API_KEY":" sk-codex-auth "}', 'utf8');
+
+    const out = await readCodexConfig(home);
+
+    expect(out?.providers[0]?.id).toBe('codex-custom');
+    expect(out?.providers[0]?.requiresApiKey).toBe(true);
+    expect(out?.apiKeyMap['codex-custom']).toBe('sk-codex-auth');
   });
 });

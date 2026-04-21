@@ -286,6 +286,7 @@ describe('config:v1:import-codex-config empty env handling', () => {
       activeProvider: 'codex-empty-env',
       activeModel: 'gpt-test',
       envKeyMap: { 'codex-empty-env': 'OPEN_CODESIGN_EMPTY_ENV_FOR_TEST' },
+      apiKeyMap: {},
       warnings: [],
     });
     process.env['OPEN_CODESIGN_EMPTY_ENV_FOR_TEST'] = '   ';
@@ -294,12 +295,51 @@ describe('config:v1:import-codex-config empty env handling', () => {
     expect(handler).toBeDefined();
     await expect(handler?.({} as unknown)).resolves.toMatchObject({
       provider: 'codex-empty-env',
-      hasKey: true,
+      hasKey: false,
     });
 
     expect(encryptSecret).not.toHaveBeenCalled();
     const written = vi.mocked(writeConfig).mock.calls.at(-1)?.[0];
     expect(written?.secrets['codex-empty-env']).toBeUndefined();
     process.env['OPEN_CODESIGN_EMPTY_ENV_FOR_TEST'] = undefined;
+  });
+
+  it('encrypts Codex auth.json API keys for providers requiring OpenAI auth', async () => {
+    const { readCodexConfig } = await import('./imports/codex-config');
+    const { tryBuildSecretRef } = await import('./keychain');
+    const { writeConfig } = await import('./config');
+    vi.mocked(tryBuildSecretRef).mockClear();
+    vi.mocked(writeConfig).mockClear();
+    vi.mocked(readCodexConfig).mockResolvedValueOnce({
+      providers: [
+        {
+          id: 'codex-custom',
+          name: 'Codex (imported)',
+          builtin: false,
+          wire: 'openai-responses',
+          baseUrl: 'https://api.duckcoding.ai/v1',
+          defaultModel: 'gpt-5.4',
+          requiresApiKey: true,
+        },
+      ],
+      activeProvider: 'codex-custom',
+      activeModel: 'gpt-5.4',
+      envKeyMap: {},
+      apiKeyMap: { 'codex-custom': 'sk-codex-auth' },
+      warnings: [],
+    });
+
+    const handler = handlers.get('config:v1:import-codex-config');
+    expect(handler).toBeDefined();
+    await expect(handler?.({} as unknown)).resolves.toMatchObject({
+      provider: 'codex-custom',
+      hasKey: true,
+    });
+
+    expect(tryBuildSecretRef).toHaveBeenCalledWith('sk-codex-auth');
+    const written = vi.mocked(writeConfig).mock.calls.at(-1)?.[0];
+    expect(written?.secrets['codex-custom']).toEqual(
+      expect.objectContaining({ ciphertext: 'enc:sk-codex-auth' }),
+    );
   });
 });

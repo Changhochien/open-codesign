@@ -106,7 +106,7 @@ function toState(cfg: Config | null): OnboardingState {
   }
   const active = cfg.activeProvider;
   const ref = cfg.secrets[active];
-  if (ref === undefined && !isKeylessProviderAllowed(active)) {
+  if (ref === undefined && !isKeylessProviderAllowed(active, cfg.providers[active])) {
     return {
       hasKey: false,
       provider: active,
@@ -696,12 +696,24 @@ async function runImportCodex(imported: CodexImport): Promise<OnboardingState> {
   }
   for (const entry of imported.providers) {
     nextProviders[entry.id] = entry;
+    const importedApiKey = imported.apiKeyMap[entry.id]?.trim();
     if (entry.envKey !== undefined) {
       const envValue = process.env[entry.envKey]?.trim();
       if (envValue !== undefined && envValue.length > 0) {
         const ref = tryBuildSecretRef(envValue);
         if (ref !== null) nextSecrets[entry.id] = ref;
+        continue;
       }
+    }
+    const fallbackApiKey =
+      importedApiKey !== undefined && importedApiKey.length > 0
+        ? importedApiKey
+        : entry.requiresApiKey === true
+          ? process.env['OPENAI_API_KEY']?.trim()
+          : undefined;
+    if (fallbackApiKey !== undefined && fallbackApiKey.length > 0) {
+      const ref = tryBuildSecretRef(fallbackApiKey);
+      if (ref !== null) nextSecrets[entry.id] = ref;
     }
   }
   const fallbackActive = imported.providers[0];

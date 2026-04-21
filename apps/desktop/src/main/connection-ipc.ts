@@ -8,6 +8,7 @@ import {
 } from '@open-codesign/shared';
 import { ipcMain } from './electron-runtime';
 import { getApiKeyForProvider, getCachedConfig } from './onboarding-ipc';
+import { isKeylessProviderAllowed } from './provider-settings';
 
 // ---------------------------------------------------------------------------
 // Payload schemas (plain validation, no zod in main to keep bundle lean)
@@ -358,8 +359,17 @@ function resolveCredentialsForProvider(
   let apiKey: string;
   try {
     apiKey = getApiKeyForProvider(providerId);
-  } catch {
+  } catch (err) {
     // No stored key — provider may be keyless (IP-whitelisted proxy).
+    if (!isKeylessProviderAllowed(providerId, entry)) {
+      return {
+        ok: false,
+        code: 'IPC_BAD_INPUT',
+        message:
+          err instanceof Error ? err.message : `No API key stored for provider "${providerId}"`,
+        hint: 'Open Settings and import Codex again, or add an API key for this provider',
+      };
+    }
     apiKey = '';
   }
   return {
@@ -385,9 +395,7 @@ function resolveActiveCredentials(): ActiveProviderCredentials | ConnectionTestE
   return resolveCredentialsForProvider(active);
 }
 
-async function runProviderTest(
-  creds: ActiveProviderCredentials,
-): Promise<ConnectionTestResponse> {
+async function runProviderTest(creds: ActiveProviderCredentials): Promise<ConnectionTestResponse> {
   const { url } = buildEndpointForWire(creds.wire, creds.baseUrl);
   const headers = buildAuthHeadersForWire(creds.wire, creds.apiKey, creds.httpHeaders);
 
@@ -594,8 +602,15 @@ export function registerConnectionIpc(): void {
       let apiKey: string;
       try {
         apiKey = getApiKeyForProvider(raw);
-      } catch {
-        // No stored key — provider may be keyless (IP-whitelisted proxy).
+      } catch (err) {
+        if (!isKeylessProviderAllowed(raw, entry)) {
+          return {
+            ok: false,
+            code: 'IPC_BAD_INPUT',
+            message: err instanceof Error ? err.message : `No API key stored for provider "${raw}"`,
+            hint: 'Open Settings and import Codex again, or add an API key for this provider',
+          };
+        }
         apiKey = '';
       }
 

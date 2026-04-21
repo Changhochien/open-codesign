@@ -771,7 +771,6 @@ function ModelsTab() {
           <AddProviderMenu
             open={showAddMenu}
             setOpen={setShowAddMenu}
-            hasCodexImported={rows.some((r) => r.provider.startsWith('codex-'))}
             hasClaudeCodeImported={rows.some((r) => r.provider === 'claude-code-imported')}
             onImportCodex={() => {
               setShowAddMenu(false);
@@ -1296,7 +1295,6 @@ export function Settings() {
 interface AddProviderMenuProps {
   open: boolean;
   setOpen: (v: boolean) => void;
-  hasCodexImported: boolean;
   hasClaudeCodeImported: boolean;
   onImportCodex: () => void;
   onImportClaudeCode: () => void;
@@ -1306,7 +1304,6 @@ interface AddProviderMenuProps {
 function AddProviderMenu({
   open,
   setOpen,
-  hasCodexImported,
   hasClaudeCodeImported,
   onImportCodex,
   onImportClaudeCode,
@@ -1344,7 +1341,7 @@ function AddProviderMenu({
       desc: t('settings.providers.import.codexMenuDesc', {
         defaultValue: '读取 ~/.codex/config.toml',
       }),
-      disabled: hasCodexImported,
+      disabled: false,
       onClick: onImportCodex,
     },
     {

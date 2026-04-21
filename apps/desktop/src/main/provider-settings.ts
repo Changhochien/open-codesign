@@ -55,12 +55,14 @@ export function getAddProviderDefaults(
 
 export function assertProviderHasStoredSecret(cfg: Config, provider: string): void {
   if (cfg.secrets[provider] !== undefined) return;
-  if (provider.startsWith('codex-')) return;
+  if (isKeylessProviderAllowed(provider, resolveEntryFor(cfg, provider))) return;
   throw new CodesignError(`No API key stored for provider "${provider}".`, 'PROVIDER_KEY_MISSING');
 }
 
-export function isKeylessProviderAllowed(provider: string): boolean {
-  return provider.startsWith('codex-');
+export function isKeylessProviderAllowed(provider: string, entry?: ProviderEntry | null): boolean {
+  return (
+    provider.startsWith('codex-') && entry?.requiresApiKey !== true && entry?.envKey === undefined
+  );
 }
 
 function resolveEntryFor(cfg: Config, id: string): ProviderEntry | null {
@@ -130,7 +132,7 @@ export function toProviderRows(
           : ''),
       // codex-* providers are treated as no-auth / IP-gated by default —
       // absent secret is a legitimate state, not a "missing key" warning.
-      hasKey: ref !== undefined || provider.startsWith('codex-'),
+      hasKey: ref !== undefined || isKeylessProviderAllowed(provider, entry),
       ...(entry?.reasoningLevel !== undefined ? { reasoningLevel: entry.reasoningLevel } : {}),
       ...(rowError !== undefined ? { error: rowError } : {}),
     });
@@ -151,7 +153,9 @@ export interface DeleteProviderResult {
  */
 export function computeDeleteProviderResult(cfg: Config, toDelete: string): DeleteProviderResult {
   const remaining = Object.keys(cfg.providers).filter(
-    (p) => p !== toDelete && (cfg.secrets[p] !== undefined || isKeylessProviderAllowed(p)),
+    (p) =>
+      p !== toDelete &&
+      (cfg.secrets[p] !== undefined || isKeylessProviderAllowed(p, resolveEntryFor(cfg, p))),
   );
 
   if (remaining.length === 0) {
@@ -186,6 +190,7 @@ export interface ActiveModelResolution {
   httpHeaders: Record<string, string> | undefined;
   queryParams: Record<string, string> | undefined;
   reasoningLevel: ReasoningLevel | undefined;
+  allowKeyless: boolean;
   /** True when the renderer-supplied hint provider didn't match the canonical active. */
   overridden: boolean;
 }
@@ -195,17 +200,18 @@ export function resolveActiveModel(
   hint: { provider: string; modelId: string },
 ): ActiveModelResolution {
   const activeId = cfg.activeProvider;
-  if (cfg.secrets[activeId] === undefined && !isKeylessProviderAllowed(activeId)) {
-    throw new CodesignError(
-      `No API key stored for active provider "${activeId}". Re-run onboarding to add one.`,
-      'PROVIDER_KEY_MISSING',
-    );
-  }
   const entry = resolveEntryFor(cfg, activeId);
   if (entry === null) {
     throw new CodesignError(
       `Active provider "${activeId}" has no provider entry on disk.`,
       'PROVIDER_NOT_SUPPORTED',
+    );
+  }
+  const allowKeyless = isKeylessProviderAllowed(activeId, entry);
+  if (cfg.secrets[activeId] === undefined && !allowKeyless) {
+    throw new CodesignError(
+      `No API key stored for active provider "${activeId}". Re-run onboarding to add one.`,
+      'PROVIDER_KEY_MISSING',
     );
   }
   const overridden = activeId !== hint.provider;
@@ -217,6 +223,7 @@ export function resolveActiveModel(
     httpHeaders: entry.httpHeaders,
     queryParams: entry.queryParams,
     reasoningLevel: entry.reasoningLevel,
+    allowKeyless,
     overridden,
   };
 }

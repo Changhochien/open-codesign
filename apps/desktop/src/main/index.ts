@@ -45,7 +45,7 @@ import {
 } from './onboarding-ipc';
 import { readPersisted as readPreferences, registerPreferencesIpc } from './preferences-ipc';
 import { preparePromptContext } from './prompt-context';
-import { isKeylessProviderAllowed, resolveActiveModel } from './provider-settings';
+import { resolveActiveModel } from './provider-settings';
 import { safeInitSnapshotsDb } from './snapshots-db';
 import { registerSnapshotsIpc, registerSnapshotsUnavailableIpc } from './snapshots-ipc';
 import { initStorageSettings } from './storage-settings';
@@ -447,7 +447,7 @@ function registerIpcHandlers(): void {
     } catch {
       apiKey = '';
     }
-    const allowKeyless = isKeylessProviderAllowed(active.model.provider);
+    const allowKeyless = active.allowKeyless;
     // Once we've snapped to the canonical active provider, the renderer-supplied
     // baseUrl can no longer be trusted — it may belong to a different (stale)
     // provider and would route the active provider's API key to the wrong host.
@@ -587,7 +587,7 @@ function registerIpcHandlers(): void {
     } catch {
       apiKey = '';
     }
-    const allowKeyless = isKeylessProviderAllowed(active.model.provider);
+    const allowKeyless = active.allowKeyless;
     // See codesign:v1:generate above — renderer baseUrl is ignored post-snap.
     const baseUrl = active.baseUrl ?? undefined;
     if (active.overridden) {
@@ -686,7 +686,7 @@ function registerIpcHandlers(): void {
     } catch {
       apiKey = '';
     }
-    const allowKeyless = isKeylessProviderAllowed(active.model.provider);
+    const allowKeyless = active.allowKeyless;
     const baseUrl = active.baseUrl ?? undefined;
     const promptContext = await preparePromptContext({
       attachments: payload.attachments,
@@ -762,7 +762,7 @@ function registerIpcHandlers(): void {
     } catch {
       apiKey = '';
     }
-    const allowKeyless = isKeylessProviderAllowed(active.model.provider);
+    const allowKeyless = active.allowKeyless;
     const baseUrl = active.baseUrl ?? undefined;
     return generateTitle({
       prompt,

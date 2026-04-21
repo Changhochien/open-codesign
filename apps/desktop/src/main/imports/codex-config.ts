@@ -10,12 +10,18 @@ export function codexConfigPath(home: string = homedir()): string {
   return join(home, '.codex', 'config.toml');
 }
 
+export function codexAuthPath(home: string = homedir()): string {
+  return join(home, '.codex', 'auth.json');
+}
+
 export interface CodexImport {
   providers: ProviderEntry[];
   activeProvider: string | null;
   activeModel: string | null;
   /** Env-key lookups the caller should run to resolve keys. */
   envKeyMap: Record<string, string>; // providerId → envVarName
+  /** API keys resolved from Codex auth.json, keyed by imported provider id. */
+  apiKeyMap: Record<string, string>;
   warnings: string[];
 }
 
@@ -25,6 +31,7 @@ type CodexProviderBlock = {
   env_key?: string;
   model?: string;
   wire_api?: string;
+  requires_openai_auth?: boolean;
   http_headers?: Record<string, string>;
   query_params?: Record<string, string>;
 };
@@ -49,6 +56,7 @@ export async function parseCodexConfig(toml: string): Promise<CodexImport> {
       activeProvider: null,
       activeModel: null,
       envKeyMap: {},
+      apiKeyMap: {},
       warnings: [`Codex config.toml is not valid TOML: ${msg}`],
     };
   }
@@ -59,6 +67,7 @@ export async function parseCodexConfig(toml: string): Promise<CodexImport> {
       activeProvider: null,
       activeModel: null,
       envKeyMap: {},
+      apiKeyMap: {},
       warnings: ['Codex config.toml has unexpected top-level shape'],
     };
   }
@@ -109,6 +118,9 @@ export async function parseCodexConfig(toml: string): Promise<CodexImport> {
           entry.envKey = block.env_key;
           envKeyMap[entry.id] = block.env_key;
         }
+        if (block.requires_openai_auth === true) {
+          entry.requiresApiKey = true;
+        }
         if (block.http_headers !== undefined && typeof block.http_headers === 'object') {
           const map: Record<string, string> = {};
           for (const [k, v] of Object.entries(block.http_headers)) {
@@ -135,7 +147,34 @@ export async function parseCodexConfig(toml: string): Promise<CodexImport> {
     if (entry !== undefined) entry.defaultModel = activeModel;
   }
 
-  return { providers, activeProvider: activeProviderId, activeModel, envKeyMap, warnings };
+  return {
+    providers,
+    activeProvider: activeProviderId,
+    activeModel,
+    envKeyMap,
+    apiKeyMap: {},
+    warnings,
+  };
+}
+
+async function readCodexOpenAiApiKey(home: string = homedir()): Promise<string | null> {
+  let raw: string;
+  try {
+    raw = await readFile(codexAuthPath(home), 'utf8');
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    throw err;
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return null;
+  const record = parsed as Record<string, unknown>;
+  const rawKey = record['OPENAI_API_KEY'] ?? record['openai_api_key'] ?? record['apiKey'];
+  return typeof rawKey === 'string' && rawKey.trim().length > 0 ? rawKey.trim() : null;
 }
 
 export async function readCodexConfig(home: string = homedir()): Promise<CodexImport | null> {
@@ -147,5 +186,15 @@ export async function readCodexConfig(home: string = homedir()): Promise<CodexIm
     if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
     throw err;
   }
-  return parseCodexConfig(raw);
+  const imported = await parseCodexConfig(raw);
+  const openAiApiKey = await readCodexOpenAiApiKey(home);
+  if (openAiApiKey === null) return imported;
+
+  const apiKeyMap: Record<string, string> = {};
+  for (const provider of imported.providers) {
+    if (provider.requiresApiKey === true) {
+      apiKeyMap[provider.id] = openAiApiKey;
+    }
+  }
+  return { ...imported, apiKeyMap };
 }

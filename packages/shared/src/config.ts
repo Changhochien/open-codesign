@@ -84,6 +84,12 @@ export const ProviderEntrySchema = z.object({
   httpHeaders: z.record(z.string(), z.string()).optional(),
   queryParams: z.record(z.string(), z.string()).optional(),
   /**
+   * Imported providers can explicitly require a stored secret. Codex uses this
+   * for providers with `requires_openai_auth = true`; providers without it may
+   * still be keyless proxy endpoints.
+   */
+  requiresApiKey: z.boolean().optional(),
+  /**
    * Per-provider reasoning effort override. When set, overrides the
    * model-family default from `reasoningForModel` in core. Useful for
    * proxies that gate reasoning tiers by plan (Claude Code consumer-tier
