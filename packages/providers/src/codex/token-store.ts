@@ -1,6 +1,6 @@
 import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
-import { type TokenSet, refreshTokens as defaultRefreshTokens } from './oauth';
+import { type TokenSet, decodeJwtClaims, refreshTokens as defaultRefreshTokens } from './oauth';
 
 export interface StoredCodexAuth {
   schemaVersion: 1;
@@ -21,22 +21,11 @@ export interface CodexTokenStoreOptions {
 
 const EXPIRY_BUFFER_MS = 5 * 60 * 1000;
 
-interface EmailClaims {
-  email?: unknown;
-  [key: string]: unknown;
-}
-
 function extractEmail(jwt: string): string | null {
-  try {
-    const parts = jwt.split('.');
-    if (parts.length < 2) return null;
-    const payload = Buffer.from(parts[1] ?? '', 'base64url').toString('utf8');
-    const claims = JSON.parse(payload) as EmailClaims;
-    if (typeof claims['email'] === 'string') return claims['email'];
-    return null;
-  } catch {
-    return null;
-  }
+  const claims = decodeJwtClaims(jwt);
+  if (claims === null) return null;
+  const email = claims['email'];
+  return typeof email === 'string' && email.length > 0 ? email : null;
 }
 
 function isStoredCodexAuth(value: unknown): value is StoredCodexAuth {

@@ -4,6 +4,7 @@ import {
   AUTH_BASE,
   CLIENT_ID,
   buildAuthorizeUrl,
+  decodeJwtClaims,
   exchangeCode,
   extractAccountId,
   generatePkce,
@@ -68,6 +69,28 @@ describe('buildAuthorizeUrl', () => {
       originator: 'my-custom-app',
     });
     expect(new URL(url).searchParams.get('originator')).toBe('my-custom-app');
+  });
+});
+
+describe('decodeJwtClaims', () => {
+  it('returns the claims object for a valid JWT', () => {
+    const jwt = makeJwt({ email: 'a@b.com', sub: 'user_1' });
+    expect(decodeJwtClaims(jwt)).toEqual({ email: 'a@b.com', sub: 'user_1' });
+  });
+
+  it('returns null for a malformed JWT with no dots', () => {
+    expect(decodeJwtClaims('not-a-jwt')).toBeNull();
+  });
+
+  it('returns null when the payload segment is not valid base64/JSON', () => {
+    expect(decodeJwtClaims('aaa.!!!notbase64!!!.bbb')).toBeNull();
+  });
+
+  it('returns null when the payload decodes to a non-object JSON value', () => {
+    const arr = `h.${Buffer.from(JSON.stringify([1, 2, 3])).toString('base64url')}.s`;
+    const str = `h.${Buffer.from(JSON.stringify('hello')).toString('base64url')}.s`;
+    expect(decodeJwtClaims(arr)).toBeNull();
+    expect(decodeJwtClaims(str)).toBeNull();
   });
 });
 

@@ -108,37 +108,45 @@ export async function refreshTokens(refreshToken: string): Promise<TokenSet> {
   };
 }
 
-interface JwtClaims {
-  chatgpt_account_id?: unknown;
-  organizations?: unknown;
-  [key: string]: unknown;
-}
-
-export function extractAccountId(jwt: string): string | null {
+/**
+ * Decodes the payload segment of a JWT without verifying the signature.
+ * Returns null on any parse/format failure. Intended for reading non-security
+ * claims (email, chatgpt_account_id, organizations) from OpenAI-issued tokens.
+ */
+export function decodeJwtClaims(jwt: string): Record<string, unknown> | null {
   try {
     const parts = jwt.split('.');
     if (parts.length < 2) return null;
-    const payload = Buffer.from(parts[1] ?? '', 'base64url').toString('utf8');
-    const claims = JSON.parse(payload) as JwtClaims;
-
-    if (typeof claims.chatgpt_account_id === 'string') {
-      return claims.chatgpt_account_id;
-    }
-
-    const nested = claims['https://api.openai.com/auth'];
-    if (nested && typeof nested === 'object') {
-      const accountId = (nested as { chatgpt_account_id?: unknown }).chatgpt_account_id;
-      if (typeof accountId === 'string') return accountId;
-    }
-
-    const orgs = claims.organizations;
-    if (Array.isArray(orgs) && orgs.length > 0) {
-      const first = orgs[0] as { id?: unknown };
-      if (first && typeof first.id === 'string') return first.id;
-    }
-
-    return null;
+    const payload = parts[1];
+    if (payload === undefined || payload === '') return null;
+    const json = Buffer.from(payload, 'base64url').toString('utf8');
+    const parsed: unknown = JSON.parse(json);
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return null;
+    return parsed as Record<string, unknown>;
   } catch {
     return null;
   }
+}
+
+export function extractAccountId(jwt: string): string | null {
+  const claims = decodeJwtClaims(jwt);
+  if (claims === null) return null;
+
+  if (typeof claims['chatgpt_account_id'] === 'string') {
+    return claims['chatgpt_account_id'];
+  }
+
+  const nested = claims['https://api.openai.com/auth'];
+  if (nested && typeof nested === 'object') {
+    const accountId = (nested as { chatgpt_account_id?: unknown }).chatgpt_account_id;
+    if (typeof accountId === 'string') return accountId;
+  }
+
+  const orgs = claims['organizations'];
+  if (Array.isArray(orgs) && orgs.length > 0) {
+    const first = orgs[0] as { id?: unknown };
+    if (first && typeof first.id === 'string') return first.id;
+  }
+
+  return null;
 }

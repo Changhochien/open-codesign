@@ -6,6 +6,7 @@ import {
   type StoredCodexAuth,
   type TokenSet,
   buildAuthorizeUrl,
+  decodeJwtClaims,
   exchangeCode,
   generatePkce,
   startCallbackServer,
@@ -64,22 +65,11 @@ export function __resetCodexTokenStoreForTests(): void {
   tokenStoreSingleton = null;
 }
 
-interface EmailClaims {
-  email?: unknown;
-  [key: string]: unknown;
-}
-
 function extractEmail(jwt: string): string | null {
-  try {
-    const parts = jwt.split('.');
-    if (parts.length < 2) return null;
-    const payload = Buffer.from(parts[1] ?? '', 'base64url').toString('utf8');
-    const claims = JSON.parse(payload) as EmailClaims;
-    if (typeof claims.email === 'string') return claims.email;
-    return null;
-  } catch {
-    return null;
-  }
+  const claims = decodeJwtClaims(jwt);
+  if (claims === null) return null;
+  const email = claims['email'];
+  return typeof email === 'string' && email.length > 0 ? email : null;
 }
 
 function toStatus(stored: StoredCodexAuth | null): CodexOAuthStatus {
