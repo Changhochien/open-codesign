@@ -283,3 +283,30 @@ body {
   background: var(--color-accent-hover);
   transform: translateY(-1px);
 }
+
+/* ── Demo video blocks ──────────────────────────────────────────────────── */
+
+/* Hero autoplay loop — sits between the VitePress hero and SmartDownload. */
+.codesign-hero-video {
+  max-width: 1080px;
+  margin: 2rem auto 0.5rem;
+  padding: 0 1.5rem;
+}
+.codesign-hero-video video {
+  width: 100%;
+  border-radius: 14px;
+  display: block;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.04), 0 16px 40px -16px rgba(26, 26, 26, 0.28);
+}
+
+/* Full-length demo with controls (generate-from-scratch walkthrough). */
+.codesign-demo-video {
+  max-width: 960px;
+  margin: 1.5rem auto 0;
+}
+.codesign-demo-video video {
+  width: 100%;
+  border-radius: 12px;
+  display: block;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.04), 0 12px 32px -12px rgba(26, 26, 26, 0.24);
+}

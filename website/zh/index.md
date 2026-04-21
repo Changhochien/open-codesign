@@ -61,6 +61,10 @@ features:
     details: HTML（内联 CSS）、PDF（本机 Chrome）、PPTX、ZIP、Markdown——全部本地生成，无需绕道 Canva。
 ---
 
+<div class="codesign-hero-video">
+  <DemoVideo hero src="/demos/app-showcase.mp4" label="Open CoDesign 多视图应用展示" />
+</div>
+
 <SmartDownload />
 
 <div class="codesign-section">
@@ -83,6 +87,18 @@ features:
     <h3>打磨、导出、交付</h3>
     <p>元素级评论、AI 滑块、版本时间线。导出 HTML、PDF、PPTX、ZIP 或 Markdown——全部本地生成。</p>
   </div>
+</div>
+
+</div>
+
+<div class="codesign-section">
+
+## 一份 design 从无到有
+
+<p class="lede">从空白 prompt 到完整 artifact——agent 规划、写代码、自检，最后交回一个 hover / tab / 空状态都已接好的交互式设计。</p>
+
+<div class="codesign-demo-video">
+  <DemoVideo src="/demos/generate-from-scratch.mp4" label="从零生成一个 design" />
 </div>
 
 </div>

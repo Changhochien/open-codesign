@@ -7,8 +7,7 @@
 [Website](https://opencoworkai.github.io/open-codesign/) · [Quickstart](#quickstart) · [vs Claude Design](https://opencoworkai.github.io/open-codesign/claude-design-alternative) · [Docs](https://opencoworkai.github.io/open-codesign/quickstart) · [Contributing](./CONTRIBUTING.md) · [Security](./SECURITY.md)
 
 <p align="center">
-  <img src="https://placehold.co/1200x600/E8E5DE/0E0E10?text=open-codesign+demo" alt="Open CoDesign — prompt to prototype (demo coming soon)" width="900" />
-  <!-- Hero placeholder via placehold.co — real screenshot coming before launch -->
+  <img src="https://raw.githubusercontent.com/OpenCoworkAI/open-codesign/main/website/public/demos/app-showcase.gif" alt="Open CoDesign — multi-view app tour" width="900" />
 </p>
 
 <p align="center">
@@ -30,12 +29,15 @@ Open CoDesign turns a natural-language prompt into a polished HTML prototype, sl
 
 ---
 
-## Quick demo (60 s)
+## Quick demo
 
-_Demo video coming soon._
+Already using Claude Code? Your providers, models, and API keys import in one click:
 
-![Prompt to prototype in seconds](https://placehold.co/800x450/f5f0eb/c96442?text=Demo+GIF+coming+soon)
-<!-- Replace with real demo GIF before launch -->
+![Import from Claude Code in one click](https://raw.githubusercontent.com/OpenCoworkAI/open-codesign/main/website/public/demos/claude-code-import.gif)
+
+From a blank prompt to a finished design — watch the agent plan, write, and self-check, then hand you back an artifact that already has hover states, tabs, and empty states wired up:
+
+![Generate a design from scratch](https://raw.githubusercontent.com/OpenCoworkAI/open-codesign/main/website/public/demos/generate-from-scratch.gif)
 
 ---
 

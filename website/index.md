@@ -61,6 +61,10 @@ features:
     details: HTML (inlined CSS), PDF (via your local Chrome), PPTX, ZIP, and Markdown — all generated on-device. No Canva detour.
 ---
 
+<div class="codesign-hero-video">
+  <DemoVideo hero src="/demos/app-showcase.mp4" label="Open CoDesign multi-view app tour" />
+</div>
+
 <SmartDownload />
 
 <div class="codesign-section">
@@ -83,6 +87,18 @@ features:
     <h3>Refine, export, hand off</h3>
     <p>Inline comments, AI sliders, snapshot timeline. Export to HTML, PDF, PPTX, ZIP, or Markdown — all on-device.</p>
   </div>
+</div>
+
+</div>
+
+<div class="codesign-section">
+
+## Watch a design come to life
+
+<p class="lede">From a blank prompt to a finished artifact — the agent plans, writes, self-checks, and hands you something with hover states, tabs, and empty states already wired up.</p>
+
+<div class="codesign-demo-video">
+  <DemoVideo src="/demos/generate-from-scratch.mp4" label="Generate a design from scratch" />
 </div>
 
 </div>

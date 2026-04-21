@@ -7,8 +7,7 @@
 [官网](https://opencoworkai.github.io/open-codesign/) · [快速开始](#快速开始) · [对比 Claude Design](https://opencoworkai.github.io/open-codesign/zh/claude-design-alternative) · [贡献指南](./CONTRIBUTING.md) · [安全政策](./SECURITY.md)
 
 <p align="center">
-  <img src="https://placehold.co/1200x600/E8E5DE/0E0E10?text=open-codesign+demo" alt="Open CoDesign — 提示词到原型（演示即将上线）" width="900" />
-  <!-- Hero 占位（placehold.co）— 正式发布前替换为真实截图 -->
+  <img src="https://raw.githubusercontent.com/OpenCoworkAI/open-codesign/main/website/public/demos/app-showcase.gif" alt="Open CoDesign — 多视图应用展示" width="900" />
 </p>
 
 <p align="center">
@@ -30,12 +29,15 @@ Open CoDesign 把自然语言提示词变成精美的 HTML 原型、幻灯片或
 
 ---
 
-## 快速演示（60 秒）
+## 快速演示
 
-_演示视频即将上线。_
+已经在用 Claude Code？一键把 providers、模型、API key 全部导进来：
 
-![几秒内从提示词到原型](https://placehold.co/800x450/f5f0eb/c96442?text=演示+GIF+即将上线)
-<!-- 发布前替换为真实 GIF -->
+![一键导入 Claude Code 配置](https://raw.githubusercontent.com/OpenCoworkAI/open-codesign/main/website/public/demos/claude-code-import.gif)
+
+从一条 prompt 到完整 design——看 agent 规划、写代码、自检，最后交回一个 hover / tab / 空状态都已接好的交互式 artifact：
+
+![从零生成一个 design](https://raw.githubusercontent.com/OpenCoworkAI/open-codesign/main/website/public/demos/generate-from-scratch.gif)
 
 ---
 
