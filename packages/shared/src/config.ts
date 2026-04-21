@@ -124,8 +124,15 @@ export const BUILTIN_PROVIDERS: Readonly<Record<SupportedOnboardingProvider, Pro
  */
 export const ConfigV3Schema = z.object({
   version: z.literal(3),
-  activeProvider: z.string().min(1),
-  activeModel: z.string().min(1),
+  // `activeProvider` / `activeModel` are ALLOWED to be empty: that's the
+  // legal "no active provider" state the app lands in once the last
+  // provider is deleted. Consumers (`toState`, `resolveActiveCredentials`,
+  // Settings UI) already branch on hasKey/undefined-entry for this case.
+  // The previous `.min(1)` invariant made the empty state unrepresentable
+  // on disk — writing it succeeded but the next boot rejected the file,
+  // hanging the main process before the window could open.
+  activeProvider: z.string(),
+  activeModel: z.string(),
   secrets: z.record(z.string(), SecretRef).default({}),
   providers: z.record(z.string(), ProviderEntrySchema).default({}),
   designSystem: StoredDesignSystem.optional(),

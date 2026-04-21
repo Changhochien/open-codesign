@@ -325,9 +325,14 @@ async function runDeleteProvider(raw: unknown): Promise<ProviderRow[]> {
   const { nextActive, modelPrimary } = computeDeleteProviderResult(cfg, raw);
 
   if (nextActive === null) {
+    // All providers gone. Reset BOTH activeProvider and activeModel to ''
+    // so the config doesn't carry a dangling reference to the just-deleted
+    // provider id (which was the old bug: the app would boot next time
+    // with activeProvider='openrouter' pointing at a missing entry and
+    // activeModel='' failing zod's min(1)).
     const emptyNext: Config = hydrateConfig({
       version: 3,
-      activeProvider: cfg.activeProvider,
+      activeProvider: '',
       activeModel: '',
       secrets: {},
       providers: nextProviders,
