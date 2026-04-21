@@ -50,8 +50,7 @@ export default defineConfig({
       'meta',
       {
         name: 'twitter:description',
-        content:
-          'Open-source desktop AI design tool. BYOK, local-first, MIT. Runs on your laptop.',
+        content: 'Open-source desktop AI design tool. BYOK, local-first, MIT. Runs on your laptop.',
       },
     ],
     ['meta', { name: 'twitter:image', content: OG_IMAGE }],
@@ -224,9 +223,7 @@ export default defineConfig({
       },
     ],
 
-    socialLinks: [
-      { icon: 'github', link: 'https://github.com/OpenCoworkAI/open-codesign' },
-    ],
+    socialLinks: [{ icon: 'github', link: 'https://github.com/OpenCoworkAI/open-codesign' }],
 
     footer: {
       message:

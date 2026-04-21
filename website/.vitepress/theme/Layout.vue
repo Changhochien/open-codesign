@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import DefaultTheme from 'vitepress/theme';
 import { useData, withBase } from 'vitepress';
+import DefaultTheme from 'vitepress/theme';
 
 const { Layout } = DefaultTheme;
 const { frontmatter } = useData();
