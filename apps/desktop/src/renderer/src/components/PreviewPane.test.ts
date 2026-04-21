@@ -149,6 +149,22 @@ describe('handlePreviewMessage trust boundary', () => {
     expect(outcome.status).toBe('rejected');
     expect(handlers.onElementRects).not.toHaveBeenCalled();
   });
+
+  it('rejects ELEMENT_RECTS whose entries array exceeds the hard cap', () => {
+    // An LLM-controlled iframe script could try to flood liveRects. Validator
+    // should drop the message before it reaches the handler.
+    const handlers = makeHandlers();
+    const entries = Array.from({ length: 257 }, (_, i) => ({
+      selector: `#a${i}`,
+      rect: { top: 0, left: 0, width: 1, height: 1 },
+    }));
+    const outcome = handlePreviewMessage(
+      { __codesign: true, type: 'ELEMENT_RECTS', entries },
+      handlers,
+    );
+    expect(outcome.status).toBe('rejected');
+    expect(handlers.onElementRects).not.toHaveBeenCalled();
+  });
 });
 
 describe('postModeToPreviewWindow', () => {

@@ -8,7 +8,7 @@ import {
   isIframeErrorMessage,
   isOverlayMessage,
 } from '@open-codesign/runtime';
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { EmptyState } from '../preview/EmptyState';
 import { ErrorState } from '../preview/ErrorState';
 import { useCodesignStore } from '../store';
@@ -134,6 +134,7 @@ interface PreviewSlotProps {
   interactionMode: string;
   registerIframe: (designId: string, el: HTMLIFrameElement | null) => void;
   onIframeError: (message: string) => void;
+  onIframeLoaded: (designId: string) => void;
 }
 
 // One iframe per pool entry. Hidden (display:none) when not active, but kept
@@ -153,6 +154,7 @@ function PreviewSlot({
   interactionMode,
   registerIframe,
   onIframeError,
+  onIframeLoaded,
 }: PreviewSlotProps) {
   const srcDocStableKey = useMemo(() => {
     return html
@@ -193,6 +195,10 @@ function PreviewSlot({
         if (!active) return;
         const target = e.currentTarget as HTMLIFrameElement;
         postModeToPreviewWindow(target.contentWindow, interactionMode, onIframeError);
+        // The parent's WATCH_SELECTORS post can race past a freshly-mounted
+        // iframe before its message listener installs. Ping the parent so it
+        // re-broadcasts after load has confirmed the overlay is live.
+        onIframeLoaded(designId);
       }}
       className={
         isMobile
@@ -294,6 +300,10 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
   // or the active iframe element re-mounts.
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const iframesByDesign = useRef<Map<string, HTMLIFrameElement>>(new Map());
+  // Bumped every time the active iframe fires onLoad — used to re-trigger
+  // the WATCH_SELECTORS effect so we don't race past overlay installation
+  // on first mount.
+  const [iframeLoadTick, setIframeLoadTick] = useState(0);
 
   const registerIframe = useCallback((designId: string, el: HTMLIFrameElement | null) => {
     if (el) {
@@ -302,6 +312,13 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
       iframesByDesign.current.delete(designId);
     }
   }, []);
+
+  const handleIframeLoaded = useCallback(
+    (designId: string) => {
+      if (designId === currentDesignId) setIframeLoadTick((t) => t + 1);
+    },
+    [currentDesignId],
+  );
 
   // When the active design changes, retarget iframeRef and re-broadcast the
   // current interaction mode. Background iframes keep their last mode — fine,
@@ -325,7 +342,7 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
   // Selectors: all comments on the current snapshot + the active bubble's
   // selector (usually the freshly-pinned one, included for the moment
   // between click and save).
-  // biome-ignore lint/correctness/useExhaustiveDependencies: currentDesignId is intentional — iframeRef.current is a ref so biome can't see that it changes with the active design. When the design switches we MUST resend WATCH_SELECTORS to the newly-active iframe; the currentDesignId dependency is what triggers that re-run.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: currentDesignId and iframeLoadTick are deliberate triggers — iframeRef.current is a ref so biome can't see it swap when the active design changes, and we must wait for the iframe's onLoad before the overlay's message listener exists (otherwise the post is dropped).
   useEffect(() => {
     const win = iframeRef.current?.contentWindow;
     if (!win) return;
@@ -344,7 +361,7 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
     } catch {
       /* sandbox gone — retry happens next render */
     }
-  }, [comments, currentSnapshotId, commentBubble, currentDesignId]);
+  }, [comments, currentSnapshotId, commentBubble, currentDesignId, iframeLoadTick]);
 
   useEffect(() => {
     function onMessage(event: MessageEvent): void {
@@ -429,12 +446,7 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
           selector: c.selector,
           tag: c.tag,
           outerHTML: c.outerHTML,
-          rect: {
-            top: live.top * (previewZoom / 100),
-            left: live.left * (previewZoom / 100),
-            width: live.width * (previewZoom / 100),
-            height: live.height * (previewZoom / 100),
-          },
+          rect: scaleRectForZoom(live, previewZoom),
           existingCommentId: c.id,
           initialText: c.text,
         });
@@ -494,6 +506,7 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
             interactionMode={interactionMode}
             registerIframe={registerIframe}
             onIframeError={pushIframeError}
+            onIframeLoaded={handleIframeLoaded}
           />
         ))}
         {!activeHasHtml ? (
@@ -530,12 +543,7 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
           ? (() => {
               const liveForBubble = liveRects[commentBubble.selector];
               const scaled = liveForBubble
-                ? {
-                    top: liveForBubble.top * (previewZoom / 100),
-                    left: liveForBubble.left * (previewZoom / 100),
-                    width: liveForBubble.width * (previewZoom / 100),
-                    height: liveForBubble.height * (previewZoom / 100),
-                  }
+                ? scaleRectForZoom(liveForBubble, previewZoom)
                 : commentBubble.rect;
               return (
                 <CommentBubble

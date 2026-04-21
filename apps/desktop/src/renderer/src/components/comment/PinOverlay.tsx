@@ -61,10 +61,6 @@ export function pinStyleFromRect(rect: CommentRect, zoom: number): { top: string
   return { top: `${top}px`, left: `${left}px` };
 }
 
-export function pinStyle(comment: CommentRow, zoom: number): { top: string; left: string } {
-  return pinStyleFromRect(comment.rect, zoom);
-}
-
 export function PinOverlay({ comments, zoom, onPinClick, liveRects }: PinOverlayProps) {
   const t = useT();
   if (comments.length === 0) return null;

@@ -334,11 +334,19 @@ export interface ElementRectsMessage {
   }>;
 }
 
+/** Hard ceiling on entries per ELEMENT_RECTS message. The iframe runs LLM
+ *  HTML; even though our overlay is trusted, untrusted in-iframe code can
+ *  synthesise a matching envelope. Cap worst-case memory growth in the
+ *  parent's liveRects store. Chosen generously — a design with 256 tracked
+ *  pins is already beyond any realistic review session. */
+export const MAX_ELEMENT_RECTS_ENTRIES = 256;
+
 export function isElementRectsMessage(data: unknown): data is ElementRectsMessage {
   if (typeof data !== 'object' || data === null) return false;
   const d = data as { __codesign?: boolean; type?: string; entries?: unknown };
   if (d.__codesign !== true || d.type !== 'ELEMENT_RECTS') return false;
   if (!Array.isArray(d.entries)) return false;
+  if (d.entries.length > MAX_ELEMENT_RECTS_ENTRIES) return false;
   for (const e of d.entries) {
     if (typeof e !== 'object' || e === null) return false;
     const entry = e as { selector?: unknown; rect?: unknown };
