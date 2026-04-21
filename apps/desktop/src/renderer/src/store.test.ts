@@ -739,3 +739,38 @@ describe('useCodesignStore interaction mode', () => {
     expect(s.selectedElement).toBeNull();
   });
 });
+
+describe('useCodesignStore liveRects', () => {
+  it('applyLiveRects merges entries by selector', () => {
+    useCodesignStore.setState({ liveRects: {} });
+    useCodesignStore.getState().applyLiveRects([
+      { selector: '#a', rect: { top: 10, left: 20, width: 30, height: 40 } },
+      { selector: '#b', rect: { top: 1, left: 2, width: 3, height: 4 } },
+    ]);
+    expect(useCodesignStore.getState().liveRects).toEqual({
+      '#a': { top: 10, left: 20, width: 30, height: 40 },
+      '#b': { top: 1, left: 2, width: 3, height: 4 },
+    });
+
+    useCodesignStore
+      .getState()
+      .applyLiveRects([{ selector: '#a', rect: { top: 99, left: 20, width: 30, height: 40 } }]);
+    expect(useCodesignStore.getState().liveRects['#a']?.top).toBe(99);
+    expect(useCodesignStore.getState().liveRects['#b']?.top).toBe(1);
+  });
+
+  it('clearLiveRects wipes the map (used on design switch)', () => {
+    useCodesignStore.setState({
+      liveRects: { '#a': { top: 1, left: 2, width: 3, height: 4 } },
+    });
+    useCodesignStore.getState().clearLiveRects();
+    expect(useCodesignStore.getState().liveRects).toEqual({});
+  });
+
+  it('applyLiveRects is a no-op for empty entries (keeps reference stable)', () => {
+    const map = { '#a': { top: 1, left: 2, width: 3, height: 4 } };
+    useCodesignStore.setState({ liveRects: map });
+    useCodesignStore.getState().applyLiveRects([]);
+    expect(useCodesignStore.getState().liveRects).toBe(map);
+  });
+});

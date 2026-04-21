@@ -26,8 +26,8 @@ import REACT_UMD from '../vendor/react.umd.js?raw';
 import { OVERLAY_SCRIPT } from './overlay';
 import { TWEAKS_BRIDGE_LISTENER, TWEAKS_BRIDGE_SETUP } from './tweaks-bridge';
 
-export { OVERLAY_SCRIPT, isOverlayMessage } from './overlay';
-export type { OverlayMessage } from './overlay';
+export { OVERLAY_SCRIPT, isOverlayMessage, isElementRectsMessage } from './overlay';
+export type { OverlayMessage, ElementRectsMessage } from './overlay';
 export { isIframeErrorMessage } from './iframe-errors';
 export type { IframeErrorMessage } from './iframe-errors';
 

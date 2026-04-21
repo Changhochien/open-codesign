@@ -1,5 +1,5 @@
 import { useT } from '@open-codesign/i18n';
-import type { CommentRow } from '@open-codesign/shared';
+import type { CommentRect, CommentRow } from '@open-codesign/shared';
 
 export interface PinOverlayProps {
   /** Comments filtered to the currently-viewed snapshot. */
@@ -8,6 +8,10 @@ export interface PinOverlayProps {
   zoom: number;
   /** Called when a pin is clicked; opens the CommentBubble anchored at its rect. */
   onPinClick: (comment: CommentRow) => void;
+  /** Live, iframe-viewport-relative rects by selector. When present for a
+   *  comment's selector, it overrides the stored rect — this is how pins
+   *  stay glued to their element across iframe scroll/resize. Unscaled. */
+  liveRects?: Record<string, CommentRect>;
 }
 
 export interface PinVariant {
@@ -47,24 +51,25 @@ export function variantFor(comment: CommentRow): PinVariant {
   };
 }
 
-export function pinStyle(comment: CommentRow, zoom: number): { top: string; left: string } {
+export function pinStyleFromRect(rect: CommentRect, zoom: number): { top: string; left: string } {
   const scale = zoom / 100;
   // Position pin at the outer top-right corner: half-overlapping the corner
   // so it reads as a "badge" attached to the element rather than floating
   // randomly. Pin is 20px, so offset by -10 = half outside.
-  const top = comment.rect.top * scale - 10;
-  const left = comment.rect.left * scale + comment.rect.width * scale - 10;
+  const top = rect.top * scale - 10;
+  const left = rect.left * scale + rect.width * scale - 10;
   return { top: `${top}px`, left: `${left}px` };
 }
 
-export function PinOverlay({ comments, zoom, onPinClick }: PinOverlayProps) {
+export function PinOverlay({ comments, zoom, onPinClick, liveRects }: PinOverlayProps) {
   const t = useT();
   if (comments.length === 0) return null;
   return (
     <div className="pointer-events-none absolute inset-0 z-[5]">
       {comments.map((comment, index) => {
         const v = variantFor(comment);
-        const pos = pinStyle(comment, zoom);
+        const rect = liveRects?.[comment.selector] ?? comment.rect;
+        const pos = pinStyleFromRect(rect, zoom);
         const label =
           comment.kind === 'note'
             ? t('pinOverlay.note', { n: index + 1 })

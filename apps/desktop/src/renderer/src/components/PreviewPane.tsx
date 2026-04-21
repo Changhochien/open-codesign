@@ -1,12 +1,14 @@
 import { useT } from '@open-codesign/i18n';
 import {
+  type ElementRectsMessage,
   type IframeErrorMessage,
   type OverlayMessage,
   buildSrcdoc,
+  isElementRectsMessage,
   isIframeErrorMessage,
   isOverlayMessage,
 } from '@open-codesign/runtime';
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { EmptyState } from '../preview/EmptyState';
 import { ErrorState } from '../preview/ErrorState';
 import { useCodesignStore } from '../store';
@@ -85,11 +87,12 @@ export function stablePreviewSourceKey(source: string): string {
     );
 }
 
-export type AllowedPreviewMessageType = 'ELEMENT_SELECTED' | 'IFRAME_ERROR';
+export type AllowedPreviewMessageType = 'ELEMENT_SELECTED' | 'IFRAME_ERROR' | 'ELEMENT_RECTS';
 
 export interface PreviewMessageHandlers {
   onElementSelected: (msg: OverlayMessage) => void;
   onIframeError: (msg: IframeErrorMessage) => void;
+  onElementRects: (msg: ElementRectsMessage) => void;
 }
 
 export type PreviewMessageOutcome =
@@ -121,6 +124,12 @@ export function handlePreviewMessage(
         return { status: 'handled', type: 'IFRAME_ERROR' };
       }
       return { status: 'rejected', reason: 'shape', type: envelope.type };
+    case 'ELEMENT_RECTS':
+      if (isElementRectsMessage(data)) {
+        handlers.onElementRects(data);
+        return { status: 'handled', type: 'ELEMENT_RECTS' };
+      }
+      return { status: 'rejected', reason: 'shape', type: envelope.type };
     default:
       return { status: 'rejected', reason: 'unknown-type', type: envelope.type };
   }
@@ -141,6 +150,7 @@ interface PreviewSlotProps {
   interactionMode: string;
   registerIframe: (designId: string, el: HTMLIFrameElement | null) => void;
   onIframeError: (message: string) => void;
+  onIframeLoaded: (designId: string) => void;
 }
 
 // One iframe per pool entry. Hidden (display:none) when not active, but kept
@@ -160,6 +170,7 @@ function PreviewSlot({
   interactionMode,
   registerIframe,
   onIframeError,
+  onIframeLoaded,
 }: PreviewSlotProps) {
   const srcDocStableKey = useMemo(() => stablePreviewSourceKey(html), [html]);
 
@@ -190,6 +201,10 @@ function PreviewSlot({
         if (!active) return;
         const target = e.currentTarget as HTMLIFrameElement;
         postModeToPreviewWindow(target.contentWindow, interactionMode, onIframeError);
+        // The parent's WATCH_SELECTORS post can race past a freshly-mounted
+        // iframe before its message listener installs. Ping the parent so it
+        // re-broadcasts after load has confirmed the overlay is live.
+        onIframeLoaded(designId);
       }}
       className={
         isMobile
@@ -282,12 +297,19 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
   const openCommentBubble = useCodesignStore((s) => s.openCommentBubble);
   const closeCommentBubble = useCodesignStore((s) => s.closeCommentBubble);
   const addComment = useCodesignStore((s) => s.addComment);
+  const applyLiveRects = useCodesignStore((s) => s.applyLiveRects);
+  const clearLiveRects = useCodesignStore((s) => s.clearLiveRects);
+  const liveRects = useCodesignStore((s) => s.liveRects);
 
   // Active iframe ref consumed by TweakPanel (postMessage target) and by the
   // window.message guard. We re-point this whenever the active design changes
   // or the active iframe element re-mounts.
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const iframesByDesign = useRef<Map<string, HTMLIFrameElement>>(new Map());
+  // Bumped every time the active iframe fires onLoad — used to re-trigger
+  // the WATCH_SELECTORS effect so we don't race past overlay installation
+  // on first mount.
+  const [iframeLoadTick, setIframeLoadTick] = useState(0);
 
   const registerIframe = useCallback((designId: string, el: HTMLIFrameElement | null) => {
     if (el) {
@@ -296,6 +318,13 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
       iframesByDesign.current.delete(designId);
     }
   }, []);
+
+  const handleIframeLoaded = useCallback(
+    (designId: string) => {
+      if (designId === currentDesignId) setIframeLoadTick((t) => t + 1);
+    },
+    [currentDesignId],
+  );
 
   // When the active design changes, retarget iframeRef and re-broadcast the
   // current interaction mode. Background iframes keep their last mode — fine,
@@ -310,7 +339,35 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
     if (el) {
       postModeToPreviewWindow(el.contentWindow, interactionMode, pushIframeError);
     }
-  }, [currentDesignId, interactionMode, pushIframeError]);
+    // New iframe / new design → liveRects from the old one are stale.
+    clearLiveRects();
+  }, [currentDesignId, interactionMode, pushIframeError, clearLiveRects]);
+
+  // Tell the sandbox which selectors to track. The sandbox re-measures each
+  // on scroll/resize and broadcasts ELEMENT_RECTS; we merge into liveRects.
+  // Selectors: all comments on the current snapshot + the active bubble's
+  // selector (usually the freshly-pinned one, included for the moment
+  // between click and save).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: currentDesignId and iframeLoadTick are deliberate triggers — iframeRef.current is a ref so biome can't see it swap when the active design changes, and we must wait for the iframe's onLoad before the overlay's message listener exists (otherwise the post is dropped).
+  useEffect(() => {
+    const win = iframeRef.current?.contentWindow;
+    if (!win) return;
+    const selectors = new Set<string>();
+    if (currentSnapshotId) {
+      for (const c of comments) {
+        if (c.snapshotId === currentSnapshotId) selectors.add(c.selector);
+      }
+    }
+    if (commentBubble) selectors.add(commentBubble.selector);
+    try {
+      win.postMessage(
+        { __codesign: true, type: 'WATCH_SELECTORS', selectors: Array.from(selectors) },
+        '*',
+      );
+    } catch {
+      /* sandbox gone — retry happens next render */
+    }
+  }, [comments, currentSnapshotId, commentBubble, currentDesignId, iframeLoadTick]);
 
   useEffect(() => {
     function onMessage(event: MessageEvent): void {
@@ -340,6 +397,9 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
         },
         onIframeError: (msg) =>
           pushIframeError(formatIframeError(msg.kind, msg.message, msg.source, msg.lineno)),
+        onElementRects: (msg) => {
+          applyLiveRects(msg.entries);
+        },
       });
 
       if (outcome.status === 'rejected' && outcome.reason === 'unknown-type') {
@@ -349,7 +409,7 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
 
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [pushIframeError, selectCanvasElement, openCommentBubble, previewZoom]);
+  }, [pushIframeError, selectCanvasElement, openCommentBubble, previewZoom, applyLiveRects]);
 
   // Pool entries: active design first (using the freshest in-memory
   // previewHtml), then any other recently-visited designs that still have a
@@ -385,21 +445,18 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
     <PinOverlay
       comments={snapshotComments}
       zoom={previewZoom}
-      onPinClick={(c) =>
+      liveRects={liveRects}
+      onPinClick={(c) => {
+        const live = liveRects[c.selector] ?? c.rect;
         openCommentBubble({
           selector: c.selector,
           tag: c.tag,
           outerHTML: c.outerHTML,
-          rect: {
-            top: c.rect.top * (previewZoom / 100),
-            left: c.rect.left * (previewZoom / 100),
-            width: c.rect.width * (previewZoom / 100),
-            height: c.rect.height * (previewZoom / 100),
-          },
+          rect: scaleRectForZoom(live, previewZoom),
           existingCommentId: c.id,
           initialText: c.text,
-        })
-      }
+        });
+      }}
     />
   );
 
@@ -455,6 +512,7 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
             interactionMode={interactionMode}
             registerIframe={registerIframe}
             onIframeError={pushIframeError}
+            onIframeLoaded={handleIframeLoaded}
           />
         ))}
         {!activeHasHtml ? (
@@ -487,54 +545,62 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
           {body}
           {previewHtml ? <TweakPanel iframeRef={iframeRef} /> : null}
         </div>
-        {commentBubble && interactionMode === 'comment' ? (
-          <CommentBubble
-            key={commentBubble.selector}
-            selector={commentBubble.selector}
-            tag={commentBubble.tag}
-            outerHTML={commentBubble.outerHTML}
-            rect={commentBubble.rect}
-            {...(commentBubble.initialText !== undefined
-              ? { initialText: commentBubble.initialText }
-              : {})}
-            onClose={() => {
-              const win = iframeRef.current?.contentWindow;
-              if (win) {
-                try {
-                  win.postMessage({ __codesign: true, type: 'CLEAR_PIN' }, '*');
-                } catch {
-                  /* noop */
-                }
-              }
-              closeCommentBubble();
-            }}
-            onSendToClaude={async (text: string) => {
-              await addComment({
-                kind: 'edit',
-                selector: commentBubble.selector,
-                tag: commentBubble.tag,
-                outerHTML: commentBubble.outerHTML,
-                rect: commentBubble.rect,
-                text,
-                scope: 'element',
-                ...(commentBubble.parentOuterHTML
-                  ? { parentOuterHTML: commentBubble.parentOuterHTML }
-                  : {}),
-              });
-              const win = iframeRef.current?.contentWindow;
-              if (win) {
-                try {
-                  win.postMessage({ __codesign: true, type: 'CLEAR_PIN' }, '*');
-                } catch {
-                  /* noop */
-                }
-              }
-              closeCommentBubble();
-              // Stage only — user clicks the "Apply" button on the chip bar
-              // to send all accumulated edits in one go.
-            }}
-          />
-        ) : null}
+        {commentBubble && interactionMode === 'comment'
+          ? (() => {
+              const liveForBubble = liveRects[commentBubble.selector];
+              const scaled = liveForBubble
+                ? scaleRectForZoom(liveForBubble, previewZoom)
+                : commentBubble.rect;
+              return (
+                <CommentBubble
+                  key={commentBubble.selector}
+                  selector={commentBubble.selector}
+                  tag={commentBubble.tag}
+                  outerHTML={commentBubble.outerHTML}
+                  rect={scaled}
+                  {...(commentBubble.initialText !== undefined
+                    ? { initialText: commentBubble.initialText }
+                    : {})}
+                  onClose={() => {
+                    const win = iframeRef.current?.contentWindow;
+                    if (win) {
+                      try {
+                        win.postMessage({ __codesign: true, type: 'CLEAR_PIN' }, '*');
+                      } catch {
+                        /* noop */
+                      }
+                    }
+                    closeCommentBubble();
+                  }}
+                  onSendToClaude={async (text: string) => {
+                    await addComment({
+                      kind: 'edit',
+                      selector: commentBubble.selector,
+                      tag: commentBubble.tag,
+                      outerHTML: commentBubble.outerHTML,
+                      rect: commentBubble.rect,
+                      text,
+                      scope: 'element',
+                      ...(commentBubble.parentOuterHTML
+                        ? { parentOuterHTML: commentBubble.parentOuterHTML }
+                        : {}),
+                    });
+                    const win = iframeRef.current?.contentWindow;
+                    if (win) {
+                      try {
+                        win.postMessage({ __codesign: true, type: 'CLEAR_PIN' }, '*');
+                      } catch {
+                        /* noop */
+                      }
+                    }
+                    closeCommentBubble();
+                    // Stage only — user clicks the "Apply" button on the chip bar
+                    // to send all accumulated edits in one go.
+                  }}
+                />
+              );
+            })()
+          : null}
       </div>
     </div>
   );

@@ -70,6 +70,7 @@ describe('handlePreviewMessage trust boundary', () => {
     return {
       onElementSelected: vi.fn(),
       onIframeError: vi.fn(),
+      onElementRects: vi.fn(),
     };
   }
 
@@ -133,6 +134,58 @@ describe('handlePreviewMessage trust boundary', () => {
     );
     expect(errorOutcome).toEqual({ status: 'handled', type: 'IFRAME_ERROR' });
     expect(handlers.onIframeError).toHaveBeenCalledOnce();
+  });
+
+  it('accepts well-formed ELEMENT_RECTS payloads and forwards entries', () => {
+    const handlers = makeHandlers();
+    const outcome = handlePreviewMessage(
+      {
+        __codesign: true,
+        type: 'ELEMENT_RECTS',
+        entries: [
+          { selector: '#a', rect: { top: 10, left: 20, width: 30, height: 40 } },
+          { selector: '[data-codesign-id="x"]', rect: { top: 1, left: 2, width: 3, height: 4 } },
+        ],
+      },
+      handlers,
+    );
+    expect(outcome).toEqual({ status: 'handled', type: 'ELEMENT_RECTS' });
+    expect(handlers.onElementRects).toHaveBeenCalledOnce();
+    const payload = handlers.onElementRects.mock.calls[0]?.[0] as {
+      entries: Array<{ selector: string }>;
+    };
+    expect(payload.entries).toHaveLength(2);
+    expect(payload.entries[0]?.selector).toBe('#a');
+  });
+
+  it('rejects ELEMENT_RECTS with a malformed rect entry', () => {
+    const handlers = makeHandlers();
+    const outcome = handlePreviewMessage(
+      {
+        __codesign: true,
+        type: 'ELEMENT_RECTS',
+        entries: [{ selector: '#bad', rect: { top: 'NaN' } }],
+      },
+      handlers,
+    );
+    expect(outcome.status).toBe('rejected');
+    expect(handlers.onElementRects).not.toHaveBeenCalled();
+  });
+
+  it('rejects ELEMENT_RECTS whose entries array exceeds the hard cap', () => {
+    // An LLM-controlled iframe script could try to flood liveRects. Validator
+    // should drop the message before it reaches the handler.
+    const handlers = makeHandlers();
+    const entries = Array.from({ length: 257 }, (_, i) => ({
+      selector: `#a${i}`,
+      rect: { top: 0, left: 0, width: 1, height: 1 },
+    }));
+    const outcome = handlePreviewMessage(
+      { __codesign: true, type: 'ELEMENT_RECTS', entries },
+      handlers,
+    );
+    expect(outcome.status).toBe('rejected');
+    expect(handlers.onElementRects).not.toHaveBeenCalled();
   });
 });
 

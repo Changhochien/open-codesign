@@ -161,6 +161,12 @@ interface CodesignState {
   commentBubble: CommentBubbleAnchor | null;
   /** Id of the snapshot currently visible in the preview — pins filter by it. */
   currentSnapshotId: string | null;
+  /** Live, iframe-viewport-relative rects keyed by selector. Updated on
+   *  every iframe scroll/resize so pins and bubbles track their anchor
+   *  element even when the design scrolls inside the sandbox. Consumers
+   *  prefer this over the stored rect when present. Unscaled — callers
+   *  apply zoom themselves. */
+  liveRects: Record<string, CommentRect>;
 
   // Workstream G — canvas file tabs
   canvasTabs: CanvasTab[];
@@ -290,6 +296,13 @@ interface CodesignState {
   }) => Promise<CommentRow | null>;
   updateComment: (id: string, patch: { text?: string }) => Promise<void>;
   removeComment: (id: string) => Promise<void>;
+  /** Replace the live rects map — called from PreviewPane when the sandbox
+   *  broadcasts an ELEMENT_RECTS message. Entries are iframe-viewport-relative
+   *  and unscaled. */
+  applyLiveRects: (entries: Array<{ selector: string; rect: CommentRect }>) => void;
+  /** Reset live rects — call on design/snapshot switch to avoid stale
+   *  overlays pointing at the previous iframe's layout. */
+  clearLiveRects: () => void;
 
   // Workstream G — canvas file tabs
   openCanvasFileTab: (path: string) => void;
@@ -981,6 +994,7 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
   commentsLoaded: false,
   commentBubble: null,
   currentSnapshotId: null,
+  liveRects: {},
 
   canvasTabs: [FILES_TAB],
   activeCanvasTab: 0,
@@ -1990,6 +2004,21 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
 
   closeCommentBubble() {
     set({ commentBubble: null });
+  },
+
+  applyLiveRects(entries) {
+    if (entries.length === 0) return;
+    set((s) => {
+      const next = { ...s.liveRects };
+      for (const { selector, rect } of entries) {
+        next[selector] = rect;
+      }
+      return { liveRects: next };
+    });
+  },
+
+  clearLiveRects() {
+    set({ liveRects: {} });
   },
 
   async addComment(input) {

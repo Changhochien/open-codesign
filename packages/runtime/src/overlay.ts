@@ -28,6 +28,55 @@ export const OVERLAY_SCRIPT = `(function() {
   }
   var currentMode = 'default';
 
+  var watchedSelectors = [];
+  var rectsFrameHandle = 0;
+
+  function resolveSelector(sel) {
+    if (!sel || typeof sel !== 'string') return null;
+    try {
+      var c = sel.charAt(0);
+      if (c === '#' || c === '[' || c === '.') return document.querySelector(sel);
+      if (c === '/') {
+        var res = document.evaluate(sel, document, null, 9, null);
+        return res && res.singleNodeValue ? res.singleNodeValue : null;
+      }
+      return document.querySelector(sel);
+    } catch (_) { return null; }
+  }
+
+  function measureAndPostRects() {
+    rectsFrameHandle = 0;
+    if (!watchedSelectors.length) return;
+    var entries = [];
+    for (var i = 0; i < watchedSelectors.length; i++) {
+      var sel = watchedSelectors[i];
+      var el = resolveSelector(sel);
+      if (!el || !el.getBoundingClientRect) continue;
+      var r = el.getBoundingClientRect();
+      entries.push({
+        selector: sel,
+        rect: { top: r.top, left: r.left, width: r.width, height: r.height }
+      });
+    }
+    if (!entries.length) return;
+    try {
+      window.parent.postMessage({
+        __codesign: true,
+        type: 'ELEMENT_RECTS',
+        entries: entries
+      }, '*');
+    } catch (err) { warnOnce('postMessage ELEMENT_RECTS failed', err); }
+  }
+
+  function scheduleRectsBroadcast() {
+    if (rectsFrameHandle) return;
+    try {
+      rectsFrameHandle = window.requestAnimationFrame(measureAndPostRects);
+    } catch (_) {
+      measureAndPostRects();
+    }
+  }
+
   var HOVER_OUTLINE = '2px solid #c96442';
   var PINNED_OUTLINE = '2.5px solid #b5441a';
 
@@ -89,6 +138,10 @@ export const OVERLAY_SCRIPT = `(function() {
       pinned = el;
       try { el.style.outline = PINNED_OUTLINE; } catch (_) {}
       var rect = el.getBoundingClientRect();
+      var selector = getXPath(el);
+      // Auto-watch the freshly-pinned element so scroll/resize immediately
+      // keep its rect live, without waiting for a parent→iframe round-trip.
+      if (watchedSelectors.indexOf(selector) === -1) watchedSelectors.push(selector);
       var parentHtml = '';
       try {
         if (el.parentElement && el.parentElement.outerHTML) {
@@ -99,7 +152,7 @@ export const OVERLAY_SCRIPT = `(function() {
         window.parent.postMessage({
           __codesign: true,
           type: 'ELEMENT_SELECTED',
-          selector: getXPath(el),
+          selector: selector,
           tag: el.tagName.toLowerCase(),
           outerHTML: (el.outerHTML || '').slice(0, 800),
           parentOuterHTML: parentHtml,
@@ -148,6 +201,21 @@ export const OVERLAY_SCRIPT = `(function() {
     }
     if (data.type === 'CLEAR_PIN') {
       clearPinned();
+      return;
+    }
+    if (data.type === 'WATCH_SELECTORS') {
+      var list = data.selectors;
+      if (!Array.isArray(list)) return;
+      var dedup = [];
+      var seen = Object.create(null);
+      for (var i = 0; i < list.length; i++) {
+        var sel = list[i];
+        if (typeof sel !== 'string' || seen[sel]) continue;
+        seen[sel] = true;
+        dedup.push(sel);
+      }
+      watchedSelectors = dedup;
+      scheduleRectsBroadcast();
       return;
     }
   }
@@ -205,6 +273,14 @@ export const OVERLAY_SCRIPT = `(function() {
     if (!window.__cs_msg) {
       try { window.addEventListener('message', onParentMessage, false); window.__cs_msg = true; } catch (_) {}
     }
+    if (!window.__cs_scroll) {
+      try {
+        // capture=true so scrolls on inner overflow containers also bubble in here
+        window.addEventListener('scroll', scheduleRectsBroadcast, true);
+        window.addEventListener('resize', scheduleRectsBroadcast, false);
+        window.__cs_scroll = true;
+      } catch (err) { warnOnce('attach scroll/resize listener failed', err); }
+    }
   }
   reattach();
   try {
@@ -259,4 +335,45 @@ export function isOverlayMessage(data: unknown): data is OverlayMessage {
     (data as { __codesign?: boolean }).__codesign === true &&
     (data as { type?: string }).type === 'ELEMENT_SELECTED'
   );
+}
+
+export interface ElementRectsMessage {
+  __codesign: true;
+  type: 'ELEMENT_RECTS';
+  entries: Array<{
+    selector: string;
+    rect: { top: number; left: number; width: number; height: number };
+  }>;
+}
+
+/** Hard ceiling on entries per ELEMENT_RECTS message. The iframe runs LLM
+ *  HTML; even though our overlay is trusted, untrusted in-iframe code can
+ *  synthesise a matching envelope. Cap worst-case memory growth in the
+ *  parent's liveRects store. Chosen generously — a design with 256 tracked
+ *  pins is already beyond any realistic review session. */
+export const MAX_ELEMENT_RECTS_ENTRIES = 256;
+
+export function isElementRectsMessage(data: unknown): data is ElementRectsMessage {
+  if (typeof data !== 'object' || data === null) return false;
+  const d = data as { __codesign?: boolean; type?: string; entries?: unknown };
+  if (d.__codesign !== true || d.type !== 'ELEMENT_RECTS') return false;
+  if (!Array.isArray(d.entries)) return false;
+  if (d.entries.length > MAX_ELEMENT_RECTS_ENTRIES) return false;
+  for (const e of d.entries) {
+    if (typeof e !== 'object' || e === null) return false;
+    const entry = e as { selector?: unknown; rect?: unknown };
+    if (typeof entry.selector !== 'string') return false;
+    const r = entry.rect as { top?: unknown; left?: unknown; width?: unknown; height?: unknown };
+    if (
+      typeof r !== 'object' ||
+      r === null ||
+      typeof r.top !== 'number' ||
+      typeof r.left !== 'number' ||
+      typeof r.width !== 'number' ||
+      typeof r.height !== 'number'
+    ) {
+      return false;
+    }
+  }
+  return true;
 }

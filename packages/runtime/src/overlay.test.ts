@@ -190,3 +190,173 @@ describe('OVERLAY_SCRIPT SET_MODE source validation', () => {
     expect(h.postedToParent).toHaveLength(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// WATCH_SELECTORS + scroll/resize → ELEMENT_RECTS broadcast.
+// The iframe owns the source of truth for each pinned element's rect; the
+// parent can't observe iframe-internal scroll, so pins drift without this.
+// ---------------------------------------------------------------------------
+
+interface RectHarness {
+  documentListeners: Map<string, (e: unknown) => void>;
+  windowListeners: Map<string, (e: unknown) => void>;
+  parent: object;
+  postedToParent: Array<Record<string, unknown>>;
+  runRaf: () => void;
+  registerElement: (selector: string, rect: DOMRect) => void;
+}
+
+function runOverlayForRects(): RectHarness {
+  const documentListeners = new Map<string, (e: unknown) => void>();
+  const windowListeners = new Map<string, (e: unknown) => void>();
+  const posted: Array<Record<string, unknown>> = [];
+  const parent = { postMessage: (msg: unknown) => posted.push(msg as Record<string, unknown>) };
+  const elements = new Map<string, { getBoundingClientRect: () => DOMRect }>();
+
+  const fakeDocument = {
+    body: {},
+    addEventListener: (type: string, fn: (e: unknown) => void) => {
+      documentListeners.set(type, fn);
+    },
+    removeEventListener: () => {},
+    querySelector: (sel: string) => elements.get(sel) ?? null,
+    evaluate: (sel: string) => ({ singleNodeValue: elements.get(sel) ?? null }),
+  };
+  let pendingRaf: (() => void) | null = null;
+  const fakeWindow = {
+    addEventListener: (type: string, fn: (e: unknown) => void) => {
+      windowListeners.set(type, fn);
+    },
+    parent,
+    requestAnimationFrame: (fn: () => void) => {
+      pendingRaf = fn;
+      return 42;
+    },
+  };
+  const fakeSetInterval = () => 1;
+  const sandbox = new Function(
+    'window',
+    'document',
+    'console',
+    'setInterval',
+    `with (window) { ${OVERLAY_SCRIPT} }`,
+  );
+  sandbox(fakeWindow, fakeDocument, { warn: () => {} }, fakeSetInterval);
+
+  return {
+    documentListeners,
+    windowListeners,
+    parent,
+    postedToParent: posted,
+    runRaf: () => {
+      const fn = pendingRaf;
+      pendingRaf = null;
+      if (fn) fn();
+    },
+    registerElement: (selector, rect) => {
+      elements.set(selector, { getBoundingClientRect: () => rect });
+    },
+  };
+}
+
+function makeRect(top: number, left: number, width: number, height: number): DOMRect {
+  return {
+    top,
+    left,
+    width,
+    height,
+    bottom: top + height,
+    right: left + width,
+    x: left,
+    y: top,
+    toJSON: () => ({}),
+  } as DOMRect;
+}
+
+describe('OVERLAY_SCRIPT rect broadcast', () => {
+  it('broadcasts ELEMENT_RECTS after WATCH_SELECTORS message', () => {
+    const h = runOverlayForRects();
+    h.registerElement('#a', makeRect(10, 20, 30, 40));
+    const onMessage = h.windowListeners.get('message');
+    onMessage?.({
+      source: h.parent,
+      data: { __codesign: true, type: 'WATCH_SELECTORS', selectors: ['#a'] },
+    });
+    h.runRaf();
+
+    const rectMsg = h.postedToParent.find((m) => m['type'] === 'ELEMENT_RECTS');
+    expect(rectMsg).toBeDefined();
+    const entries = rectMsg?.['entries'] as Array<{
+      selector: string;
+      rect: Record<string, number>;
+    }>;
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({
+      selector: '#a',
+      rect: { top: 10, left: 20, width: 30, height: 40 },
+    });
+  });
+
+  it('re-broadcasts on scroll so pins track the element', () => {
+    const h = runOverlayForRects();
+    h.registerElement('#a', makeRect(100, 0, 50, 50));
+
+    h.windowListeners.get('message')?.({
+      source: h.parent,
+      data: { __codesign: true, type: 'WATCH_SELECTORS', selectors: ['#a'] },
+    });
+    h.runRaf();
+    const firstCount = h.postedToParent.filter((m) => m['type'] === 'ELEMENT_RECTS').length;
+    expect(firstCount).toBe(1);
+
+    // Simulate the user scrolling the iframe content: the element's top moved.
+    h.registerElement('#a', makeRect(30, 0, 50, 50));
+    const onScroll = h.windowListeners.get('scroll');
+    expect(onScroll).toBeDefined();
+    onScroll?.({});
+    h.runRaf();
+
+    const all = h.postedToParent.filter((m) => m['type'] === 'ELEMENT_RECTS');
+    expect(all).toHaveLength(2);
+    const lastEntries = all[1]?.['entries'] as Array<{ rect: Record<string, number> }>;
+    expect(lastEntries[0]?.rect['top']).toBe(30);
+  });
+
+  it('coalesces burst of scroll events into one rAF-scheduled broadcast', () => {
+    const h = runOverlayForRects();
+    h.registerElement('#a', makeRect(0, 0, 1, 1));
+    h.windowListeners.get('message')?.({
+      source: h.parent,
+      data: { __codesign: true, type: 'WATCH_SELECTORS', selectors: ['#a'] },
+    });
+    h.runRaf(); // initial broadcast from WATCH_SELECTORS
+
+    const onScroll = h.windowListeners.get('scroll');
+    onScroll?.({});
+    onScroll?.({});
+    onScroll?.({});
+    h.runRaf();
+
+    const all = h.postedToParent.filter((m) => m['type'] === 'ELEMENT_RECTS');
+    // Initial + exactly one from the burst — not three.
+    expect(all).toHaveLength(2);
+  });
+
+  it('silently skips selectors that do not resolve to elements', () => {
+    const h = runOverlayForRects();
+    h.registerElement('#live', makeRect(5, 5, 5, 5));
+    h.windowListeners.get('message')?.({
+      source: h.parent,
+      data: {
+        __codesign: true,
+        type: 'WATCH_SELECTORS',
+        selectors: ['#live', '#ghost'],
+      },
+    });
+    h.runRaf();
+    const rectMsg = h.postedToParent.find((m) => m['type'] === 'ELEMENT_RECTS');
+    const entries = rectMsg?.['entries'] as Array<{ selector: string }>;
+    expect(entries).toHaveLength(1);
+    expect(entries[0]?.selector).toBe('#live');
+  });
+});
