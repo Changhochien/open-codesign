@@ -1,4 +1,5 @@
-import { join } from 'node:path';
+import { existsSync, renameSync, unlinkSync } from 'node:fs';
+import { basename, dirname, join } from 'node:path';
 import log from 'electron-log/main';
 import { app } from './electron-runtime';
 import { currentRunId } from './runContext';
@@ -35,6 +36,10 @@ export function initLogger(): typeof log {
 
   log.transports.file.resolvePathFn = () => getLogPath();
   log.transports.file.maxSize = 5 * 1024 * 1024; // 5MB
+  log.transports.file.archiveLogFn = (oldFile: { path: string } | string) => {
+    const p = typeof oldFile === 'string' ? oldFile : oldFile.path;
+    rotateLogFile(p, { existsSync, renameSync, unlinkSync });
+  };
   log.transports.file.format = '[{y}-{m}-{d} {h}:{i}:{s}.{ms}] [{level}] {scope} {text}';
   log.transports.console.level = app.isPackaged ? 'warn' : 'info';
   log.transports.console.format = '[{level}] {scope} {text}';
@@ -87,4 +92,31 @@ export function getLogger(scope: string): ScopedLogger {
 
 export function getLogPath(): string {
   return join(logsDir(), 'main.log');
+}
+
+/**
+ * Rotation policy for main.log: on overflow, keep up to 2 previous files.
+ *   main.log       -> main.old.log
+ *   main.old.log   -> main.old.1.log (if main.old.log exists before rotate)
+ *   main.old.1.log -> discarded
+ *
+ * Synchronous so electron-log v5's archive callback can complete
+ * before the next write.
+ */
+export function rotateLogFile(
+  activePath: string,
+  fs: {
+    existsSync: (p: string) => boolean;
+    renameSync: (a: string, b: string) => void;
+    unlinkSync: (p: string) => void;
+  },
+): void {
+  const dir = dirname(activePath);
+  const base = basename(activePath);
+  const stem = base.replace(/\.log$/, '');
+  const old = join(dir, `${stem}.old.log`);
+  const oldest = join(dir, `${stem}.old.1.log`);
+  if (fs.existsSync(oldest)) fs.unlinkSync(oldest);
+  if (fs.existsSync(old)) fs.renameSync(old, oldest);
+  if (fs.existsSync(activePath)) fs.renameSync(activePath, old);
 }
