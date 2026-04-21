@@ -130,12 +130,13 @@ Each release ships with `SHA256SUMS.txt` and a CycloneDX SBOM (`*-sbom.cdx.json`
 
 | Manager | Command | Status |
 |---|---|---|
-| Homebrew Cask (macOS) | `brew install --cask opencoworkai/tap/open-codesign` | 🟡 Tap pending — manifest in [`packaging/homebrew/`](./packaging/homebrew/) |
-| winget (Windows) | `winget install OpenCoworkAI.OpenCoDesign` | 🟡 First submission pending — manifest in [`packaging/winget/`](./packaging/winget/) |
-| Flathub (Linux) | `flatpak install flathub ai.opencowork.codesign` | 🟡 Submission pending — manifest in [`packaging/flatpak/`](./packaging/flatpak/) |
+| Homebrew Cask (macOS) | `brew install --cask opencoworkai/tap/open-codesign` | 🟢 Live |
+| Scoop (Windows) | `scoop bucket add opencoworkai https://github.com/OpenCoworkAI/scoop-bucket && scoop install open-codesign` | 🟢 Live |
+| winget (Windows) | `winget install OpenCoworkAI.OpenCoDesign` | 🟠 [PR #363055](https://github.com/microsoft/winget-pkgs/pull/363055) under Microsoft review |
+| Flathub (Linux) | `flatpak install flathub ai.opencowork.codesign` | ⏸ Deferred to v0.2 (needs signed build + AppStream metadata) |
 | Snap (Linux) | `snap install --dangerous open-codesign-*.snap` | 🟡 Attached to releases best-effort; Snap Store publish not yet wired |
 
-Each release-time PR is auto-opened by CI once the corresponding tap, manifest, or secret is provisioned. See each `packaging/*/README.md` for setup.
+After each tag push, CI auto-syncs SHAs back into `packaging/` and (once the winget PR merges) auto-opens downstream bumps. Every `packaging/*/README.md` documents its own mirror flow.
 </details>
 
 > **v0.1 note:** installers are unsigned. On **macOS Sequoia 15+** right-click → Open no longer bypasses Gatekeeper, and "Open Anyway" in System Settings often fails. Reliable one-liner:

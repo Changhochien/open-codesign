@@ -9,17 +9,34 @@ Get Open CoDesign running on macOS, Windows, or Linux in three steps.
 
 ## 1. Install
 
-Download the matching installer from [GitHub Releases](https://github.com/OpenCoworkAI/open-codesign/releases):
+### Via package manager (recommended)
+
+```sh
+# macOS
+brew install --cask opencoworkai/tap/open-codesign
+
+# Windows — Scoop
+scoop bucket add opencoworkai https://github.com/OpenCoworkAI/scoop-bucket
+scoop install open-codesign
+
+# Windows — winget  (pending microsoft/winget-pkgs#363055)
+winget install OpenCoworkAI.OpenCoDesign
+```
+
+### Or direct download
+
+Pick the matching installer from [GitHub Releases](https://github.com/OpenCoworkAI/open-codesign/releases):
 
 | Platform | File |
 |---|---|
 | macOS (Apple Silicon) | `open-codesign-*-arm64.dmg` |
-| macOS (Intel) | `open-codesign-*.dmg` |
-| Windows (x64 / arm64) | `open-codesign-*-setup.exe` |
-| Linux | `open-codesign-*.AppImage` |
+| macOS (Intel) | `open-codesign-*-x64.dmg` |
+| Windows (x64) | `open-codesign-*-x64-setup.exe` |
+| Windows (ARM64) | `open-codesign-*-arm64-setup.exe` |
+| Linux | `open-codesign-*-x64.AppImage` |
 
 ::: tip v0.1 note
-v0.1 installers are unsigned. **macOS**: right-click → Open, or run `xattr -d com.apple.quarantine /Applications/open-codesign.app`. **Windows**: SmartScreen → More info → Run anyway. A verified build? Compile from source — see [Architecture](./architecture).
+v0.1 installers are unsigned. **macOS Sequoia 15+**: right-click → Open no longer bypasses Gatekeeper; run `xattr -cr "/Applications/Open CoDesign.app"` once after installing (0.1.2 and earlier used `/Applications/open-codesign.app`). **Windows**: SmartScreen → More info → Run anyway. Prefer a verified build? Compile from source — see [Architecture](./architecture).
 :::
 
 ## 2. Add a provider

@@ -130,12 +130,13 @@ Open CoDesign 可以把一句自然语言提示词，直接变成一个完成度
 
 | 管理器 | 命令 | 状态 |
 |---|---|---|
-| Homebrew Cask（macOS） | `brew install --cask opencoworkai/tap/open-codesign` | 🟡 Tap 待提交，manifest 在 [`packaging/homebrew/`](./packaging/homebrew/) |
-| winget（Windows） | `winget install OpenCoworkAI.OpenCoDesign` | 🟡 首次提交待完成，manifest 在 [`packaging/winget/`](./packaging/winget/) |
-| Flathub（Linux） | `flatpak install flathub ai.opencowork.codesign` | 🟡 提交中，manifest 在 [`packaging/flatpak/`](./packaging/flatpak/) |
-| Snap（Linux） | `snap install --dangerous open-codesign-*.snap` | 🟡 会尽量随 release 附带，尚未接入 Snap Store 发布流程 |
+| Homebrew Cask（macOS） | `brew install --cask opencoworkai/tap/open-codesign` | 🟢 可用 |
+| Scoop（Windows） | `scoop bucket add opencoworkai https://github.com/OpenCoworkAI/scoop-bucket && scoop install open-codesign` | 🟢 可用 |
+| winget（Windows） | `winget install OpenCoworkAI.OpenCoDesign` | 🟠 [PR #363055](https://github.com/microsoft/winget-pkgs/pull/363055) 等 Microsoft 审核 |
+| Flathub（Linux） | `flatpak install flathub ai.opencowork.codesign` | ⏸ 延后到 v0.2（需要签名构建 + AppStream 元数据） |
+| Snap（Linux） | `snap install --dangerous open-codesign-*.snap` | 🟡 随 release 尽量附带，尚未接入 Snap Store |
 
-一旦对应的 tap、manifest 或 secret 准备好，CI 会自动为 release 打开对应 PR。详细说明见各个 `packaging/*/README.md`。
+每次 tag push 后 CI 会把 SHA 自动写回 `packaging/`，winget PR 合并后后续版本会自动提 bump PR。下游镜像流程见各个 `packaging/*/README.md`。
 </details>
 
 > **v0.1 提示：** 当前安装包未签名。**macOS Sequoia 15+** 起，右键 → 打开 已不能绕过 Gatekeeper，即使在「系统设置 → 隐私与安全性」里点"仍要打开"也经常失败。最可靠的一行命令：
