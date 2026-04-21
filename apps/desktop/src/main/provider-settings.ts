@@ -5,6 +5,7 @@ import {
   type ModelRef,
   PROVIDER_SHORTLIST,
   type ProviderEntry,
+  type ReasoningLevel,
   type WireApi,
   isSupportedOnboardingProvider,
 } from '@open-codesign/shared';
@@ -182,6 +183,7 @@ export interface ActiveModelResolution {
   wire: WireApi;
   httpHeaders: Record<string, string> | undefined;
   queryParams: Record<string, string> | undefined;
+  reasoningLevel: ReasoningLevel | undefined;
   /** True when the renderer-supplied hint provider didn't match the canonical active. */
   overridden: boolean;
 }
@@ -212,6 +214,7 @@ export function resolveActiveModel(
     wire: entry.wire,
     httpHeaders: entry.httpHeaders,
     queryParams: entry.queryParams,
+    reasoningLevel: entry.reasoningLevel,
     overridden,
   };
 }

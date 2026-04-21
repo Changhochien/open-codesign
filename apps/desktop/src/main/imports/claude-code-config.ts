@@ -56,6 +56,11 @@ export function parseClaudeCodeSettings(json: string): ClaudeCodeImport {
     wire: 'anthropic',
     baseUrl,
     defaultModel: model,
+    // Claude Code proxies commonly gate reasoning effort by plan — the
+    // consumer-tier endpoint accepts only 'medium'. Seed this default so
+    // imports just work; higher-tier users can raise it in Settings →
+    // Providers → Reasoning depth.
+    reasoningLevel: 'medium',
   };
 
   if (apiKey === null) {
