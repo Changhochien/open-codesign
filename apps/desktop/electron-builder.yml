@@ -72,7 +72,10 @@ linux:
   # opencowork.ai's other published contacts (security@, conduct@).
   maintainer: Open CoDesign Maintainers <maintainers@opencowork.ai>
   vendor: OpenCoworkAI
-  synopsis: Prompt-to-design desktop app for HTML prototypes, decks, and marketing assets.
+  # `synopsis` is the deb `Description:` one-liner and the rpm `Summary:`
+  # field. Debian convention says no trailing period — lintian emits
+  # "synopsis-ends-with-a-full-stop" if you add one.
+  synopsis: Prompt-to-design desktop app for HTML prototypes, decks, and marketing assets
   # Single-line description: fpm passes it through as a shell arg and some
   # rpmbuild paths choke on embedded newlines even when the arg is quoted.
   description: Open CoDesign turns natural-language prompts into interactive HTML prototypes, PDF-ready slide decks, and marketing assets. Multi-provider model support (Anthropic, OpenAI, Google Gemini, DeepSeek, local Ollama, any OpenAI-compatible endpoint), BYOK, local-first storage, no telemetry.
