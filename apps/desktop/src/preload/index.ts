@@ -9,11 +9,15 @@ import type {
   Design,
   DesignSnapshot,
   GeneratePayloadV1,
+  ListEventsInput,
+  ListEventsResult,
   LocalInputFile,
   ModelRef,
   OnboardingState,
   ProviderEntry,
   ReasoningLevel,
+  ReportEventInput,
+  ReportEventResult,
   SelectedElement,
   SnapshotCreateInput,
   SupportedOnboardingProvider,
@@ -507,6 +511,10 @@ const api = {
       ipcRenderer.invoke('diagnostics:v1:exportDiagnostics') as Promise<string>,
     showItemInFolder: (path: string) =>
       ipcRenderer.invoke('diagnostics:v1:showItemInFolder', path) as Promise<void>,
+    listEvents: (input: ListEventsInput) =>
+      ipcRenderer.invoke('diagnostics:v1:listEvents', input) as Promise<ListEventsResult>,
+    reportEvent: (input: ReportEventInput) =>
+      ipcRenderer.invoke('diagnostics:v1:reportEvent', input) as Promise<ReportEventResult>,
   },
   openExternal: (url: string) =>
     ipcRenderer.invoke('codesign:v1:open-external', url) as Promise<void>,

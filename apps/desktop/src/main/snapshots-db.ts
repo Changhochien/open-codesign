@@ -1139,6 +1139,13 @@ export function recordDiagnosticEvent(
   );
 }
 
+export function getDiagnosticEventById(db: Database, id: number): DiagnosticEventRow | undefined {
+  const row = db.prepare('SELECT * FROM diagnostic_events WHERE id = ?').get(id) as
+    | DiagnosticEventRowDb
+    | undefined;
+  return row === undefined ? undefined : rowToDiagnosticEvent(row);
+}
+
 export function listDiagnosticEvents(
   db: Database,
   opts?: { limit?: number; includeTransient?: boolean },

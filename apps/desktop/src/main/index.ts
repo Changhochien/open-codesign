@@ -194,7 +194,8 @@ function registerIpcHandlers(db: Database | null): void {
         // and upstream_code. JSON-stringifying `data` and passing it as
         // `stack` would produce an identical 8-hex for every provider error
         // because `extractTopFrames` requires lines starting with "at ".
-        const status = typeof data?.['upstream_status'] === 'number' ? data['upstream_status'] : '?';
+        const status =
+          typeof data?.['upstream_status'] === 'number' ? data['upstream_status'] : '?';
         const upstreamCode =
           typeof data?.['upstream_code'] === 'string' ? data['upstream_code'] : 'unknown';
         const syntheticFrame = `    at provider (${status}:${upstreamCode})`;

@@ -29,8 +29,15 @@ vi.mock('./config', () => ({
   configPath: vi.fn(() => '/tmp/config.toml'),
 }));
 
+vi.mock('zip-lib', () => ({
+  Zip: class {
+    addFile(): void {}
+    async archive(): Promise<void> {}
+  },
+}));
+
 import { registerDiagnosticsIpc } from './diagnostics-ipc';
-import { initInMemoryDb, listDiagnosticEvents } from './snapshots-db';
+import { initInMemoryDb, listDiagnosticEvents, recordDiagnosticEvent } from './snapshots-db';
 
 function invoke(channel: string, payload: unknown): unknown {
   const fn = handlers.get(channel);
@@ -44,6 +51,7 @@ beforeEach(() => {
 
 afterEach(() => {
   handlers.clear();
+  vi.restoreAllMocks();
 });
 
 describe('diagnostics:v1:log persistence', () => {
@@ -116,5 +124,149 @@ describe('diagnostics:v1:log persistence', () => {
         message: 'boom',
       }),
     ).not.toThrow();
+  });
+});
+
+describe('diagnostics:v1:listEvents', () => {
+  it('returns events from the DB wrapped in schemaVersion:1', () => {
+    const db = initInMemoryDb();
+    recordDiagnosticEvent(db, {
+      level: 'error',
+      code: 'X_CODE',
+      scope: 'renderer:app',
+      fingerprint: 'fp-a',
+      message: 'one',
+      runId: undefined,
+      stack: undefined,
+      transient: false,
+    });
+    recordDiagnosticEvent(db, {
+      level: 'error',
+      code: 'Y_CODE',
+      scope: 'renderer:app',
+      fingerprint: 'fp-b',
+      message: 'two',
+      runId: undefined,
+      stack: undefined,
+      transient: false,
+    });
+    registerDiagnosticsIpc(db);
+
+    const result = invoke('diagnostics:v1:listEvents', {
+      schemaVersion: 1,
+      limit: 10,
+      includeTransient: true,
+    }) as { schemaVersion: 1; events: Array<{ code: string }> };
+
+    expect(result.schemaVersion).toBe(1);
+    expect(result.events).toHaveLength(2);
+    const codes = result.events.map((e) => e.code).sort();
+    expect(codes).toEqual(['X_CODE', 'Y_CODE']);
+  });
+
+  it('rejects bad input (missing schemaVersion)', () => {
+    const db = initInMemoryDb();
+    registerDiagnosticsIpc(db);
+
+    expect(() => invoke('diagnostics:v1:listEvents', { limit: 10 })).toThrowError(/schemaVersion/);
+  });
+
+  it('returns empty list when db is null', () => {
+    registerDiagnosticsIpc(null);
+    const result = invoke('diagnostics:v1:listEvents', { schemaVersion: 1 }) as {
+      schemaVersion: 1;
+      events: unknown[];
+    };
+    expect(result).toEqual({ schemaVersion: 1, events: [] });
+  });
+});
+
+describe('diagnostics:v1:reportEvent', () => {
+  function baseReportInput(eventId: number, overrides: Record<string, unknown> = {}) {
+    return {
+      schemaVersion: 1 as const,
+      eventId,
+      includePromptText: false,
+      includePaths: false,
+      includeUrls: false,
+      includeTimeline: true,
+      notes: 'looks bad',
+      timeline: [],
+      ...overrides,
+    };
+  }
+
+  it('returns issueUrl + bundlePath + summaryMarkdown', async () => {
+    const db = initInMemoryDb();
+    recordDiagnosticEvent(db, {
+      level: 'error',
+      code: 'SOMETHING_BROKE',
+      scope: 'renderer:app',
+      fingerprint: 'fp-deadbeef',
+      message: 'it broke',
+      runId: undefined,
+      stack: undefined,
+      transient: false,
+    });
+    const rows = listDiagnosticEvents(db, { includeTransient: true });
+    const eventId = rows[0]?.id ?? 0;
+
+    registerDiagnosticsIpc(db);
+
+    const result = (await invoke('diagnostics:v1:reportEvent', baseReportInput(eventId))) as {
+      schemaVersion: 1;
+      issueUrl: string;
+      bundlePath: string;
+      summaryMarkdown: string;
+    };
+
+    expect(result.schemaVersion).toBe(1);
+    expect(result.bundlePath).toMatch(/open-codesign-diagnostics-.*\.zip$/);
+    expect(result.summaryMarkdown).toMatch(/SOMETHING_BROKE/);
+    expect(result.issueUrl).toContain('github.com/OpenCoworkAI/open-codesign/issues/new');
+    expect(result.issueUrl).toContain('labels=bug%2Cdiagnostic-auto');
+    expect(result.issueUrl).toContain(encodeURIComponent('[bug] SOMETHING_BROKE'));
+    expect(result.issueUrl).toContain(encodeURIComponent('fp: fp-deadbeef'));
+  });
+
+  it('throws IPC_NOT_FOUND when event id missing', async () => {
+    const db = initInMemoryDb();
+    registerDiagnosticsIpc(db);
+    await expect(invoke('diagnostics:v1:reportEvent', baseReportInput(9999))).rejects.toThrow(
+      /not found/i,
+    );
+  });
+
+  it('throws IPC_BAD_INPUT on bad payload shape', async () => {
+    const db = initInMemoryDb();
+    registerDiagnosticsIpc(db);
+    await expect(
+      invoke('diagnostics:v1:reportEvent', { schemaVersion: 1, eventId: 'nope' }),
+    ).rejects.toThrow();
+  });
+
+  it('truncates body when summary exceeds 7 KB', async () => {
+    const db = initInMemoryDb();
+    recordDiagnosticEvent(db, {
+      level: 'error',
+      code: 'HUGE',
+      scope: 'renderer:app',
+      fingerprint: 'fp-huge',
+      message: 'A'.repeat(15000),
+      runId: undefined,
+      stack: undefined,
+      transient: false,
+    });
+    const rows = listDiagnosticEvents(db, { includeTransient: true });
+    const eventId = rows[0]?.id ?? 0;
+
+    registerDiagnosticsIpc(db);
+    const result = (await invoke(
+      'diagnostics:v1:reportEvent',
+      baseReportInput(eventId, { includePromptText: true }),
+    )) as { issueUrl: string };
+
+    const decodedBody = decodeURIComponent(new URL(result.issueUrl).searchParams.get('body') ?? '');
+    expect(decodedBody).toMatch(/truncated/);
   });
 });
