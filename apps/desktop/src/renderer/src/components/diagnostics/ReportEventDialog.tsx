@@ -162,6 +162,12 @@ export function ReportEventDialog({ eventId, onClose }: ReportEventDialogProps) 
   const [triedRefresh, setTriedRefresh] = useState(false);
   const [recentWarning, setRecentWarning] = useState<RecentReportWarning | null>(null);
   const [warningDismissed, setWarningDismissed] = useState(false);
+  // Two-step confirmation when the same fingerprint was reported recently.
+  // First click on "Open issue" arms `confirmingDuplicate`; the second click
+  // within 60s actually submits. Prevents the repeat-submit pattern we saw in
+  // the field (6 reported entries for one fingerprint in minutes).
+  const [confirmingDuplicate, setConfirmingDuplicate] = useState(false);
+  const confirmTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const notesRef = useRef<HTMLTextAreaElement>(null);
 
@@ -176,6 +182,11 @@ export function ReportEventDialog({ eventId, onClose }: ReportEventDialogProps) 
       setTriedRefresh(false);
       setRecentWarning(null);
       setWarningDismissed(false);
+      setConfirmingDuplicate(false);
+      if (confirmTimeoutRef.current !== null) {
+        clearTimeout(confirmTimeoutRef.current);
+        confirmTimeoutRef.current = null;
+      }
     }
   }, [eventId]);
 
@@ -249,6 +260,18 @@ export function ReportEventDialog({ eventId, onClose }: ReportEventDialogProps) 
     if (eventId === null) return;
     if (!validateNotes(notes)) {
       setErr(`notes > ${MAX_NOTES} chars`);
+      return;
+    }
+    // Two-step confirm for 'open' when a recent duplicate exists. The first
+    // click arms the confirmation and changes the button label; the second
+    // click within 60s actually submits.
+    if (kind === 'open' && recentWarning && !confirmingDuplicate) {
+      setConfirmingDuplicate(true);
+      if (confirmTimeoutRef.current !== null) clearTimeout(confirmTimeoutRef.current);
+      confirmTimeoutRef.current = setTimeout(() => {
+        setConfirmingDuplicate(false);
+        confirmTimeoutRef.current = null;
+      }, 60_000);
       return;
     }
     setBusy(true);
@@ -470,7 +493,9 @@ export function ReportEventDialog({ eventId, onClose }: ReportEventDialogProps) 
                 disabled={busy}
                 className="h-9 px-3 rounded-[var(--radius-md)] bg-[var(--color-accent)] text-[var(--color-on-accent)] text-[var(--text-sm)] font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
               >
-                {t('diagnostics.report.openIssue')}
+                {confirmingDuplicate
+                  ? t('diagnostics.report.confirmOpenAnyway')
+                  : t('diagnostics.report.openIssue')}
               </button>
             </div>
           </>
