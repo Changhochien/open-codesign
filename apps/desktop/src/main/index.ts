@@ -27,7 +27,7 @@ import type { BrowserWindow as ElectronBrowserWindow } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import type { AgentStreamEvent } from '../preload/index';
 import { registerAppMenu } from './app-menu';
-import { writeBootErrorSync } from './boot-fallback';
+import { writeBootErrorSync, showBootDialog } from './boot-fallback';
 import { registerChatMessagesIpc, registerChatMessagesUnavailableIpc } from './chat-messages-ipc';
 import { runCodexGenerate } from './codex-generate';
 import { registerCodexOAuthIpc } from './codex-oauth-ipc';
@@ -1098,7 +1098,7 @@ void app.whenReady().then(async () => {
       electronVersion: process.versions.electron ?? 'unknown',
       nodeVersion: process.versions.node,
     });
-    const choice = dialog.showMessageBoxSync({
+    const choice = showBootDialog(app, dialog, {
       type: 'error',
       title: 'Open CoDesign failed to start',
       message: 'A startup error prevented the app from loading.',

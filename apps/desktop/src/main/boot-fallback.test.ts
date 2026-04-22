@@ -1,8 +1,8 @@
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
-import { formatBootError, writeBootErrorSync } from './boot-fallback';
+import { describe, expect, it, vi } from 'vitest';
+import { formatBootError, showBootDialog, writeBootErrorSync } from './boot-fallback';
 
 function mkCtx(overrides: Partial<Parameters<typeof formatBootError>[0]> = {}) {
   return {
@@ -60,5 +60,63 @@ describe('writeBootErrorSync', () => {
     const out = writeBootErrorSync(mkCtx({ logsDir: bogus }));
     expect(out).toBe(join(tmpdir(), 'boot-errors.log'));
     expect(existsSync(out)).toBe(true);
+  });
+});
+
+describe('showBootDialog', () => {
+  it('does NOT call the driver when app.isReady() is false', () => {
+    const driver = { showMessageBoxSync: vi.fn(() => 0) };
+    const stderrWrite = vi.spyOn(process.stderr, 'write').mockReturnValue(true);
+    try {
+      const result = showBootDialog(
+        { isReady: () => false },
+        driver,
+        {
+          type: 'error',
+          message: 'boom',
+          detail: '/tmp/x.log',
+          buttons: ['Quit'],
+          defaultId: 0,
+          cancelId: 0,
+        },
+      );
+      expect(driver.showMessageBoxSync).not.toHaveBeenCalled();
+      expect(result).toBe(0);
+      expect(stderrWrite).toHaveBeenCalled();
+    } finally {
+      stderrWrite.mockRestore();
+    }
+  });
+
+  it('calls the driver when app.isReady() is true and returns its choice', () => {
+    const driver = { showMessageBoxSync: vi.fn(() => 2) };
+    const result = showBootDialog(
+      { isReady: () => true },
+      driver,
+      {
+        type: 'error',
+        message: 'boom',
+        buttons: ['A', 'B', 'C'],
+        defaultId: 2,
+        cancelId: 2,
+      },
+    );
+    expect(driver.showMessageBoxSync).toHaveBeenCalledTimes(1);
+    expect(result).toBe(2);
+  });
+
+  it('returns 0 when not ready and cancelId is undefined', () => {
+    const driver = { showMessageBoxSync: vi.fn(() => 9) };
+    const stderrWrite = vi.spyOn(process.stderr, 'write').mockReturnValue(true);
+    try {
+      const result = showBootDialog(
+        { isReady: () => false },
+        driver,
+        { type: 'error', message: 'm' },
+      );
+      expect(result).toBe(0);
+    } finally {
+      stderrWrite.mockRestore();
+    }
   });
 });

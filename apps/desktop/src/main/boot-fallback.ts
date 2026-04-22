@@ -10,6 +10,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import type { MessageBoxSyncOptions } from 'electron';
 
 export interface BootFailureContext {
   error: unknown;
@@ -77,4 +78,38 @@ export function writeBootErrorSync(ctx: BootFailureContext): string {
     }
     return fallbackPath;
   }
+}
+
+/**
+ * Minimal subset of Electron's `app` we rely on for dialog gating. Typing it
+ * structurally keeps this module decoupled from `electron-runtime.ts` so the
+ * unit test can inject a fake without importing the real Electron module.
+ */
+export interface BootDialogApp {
+  isReady(): boolean;
+}
+
+export interface BootDialogDriver {
+  showMessageBoxSync(options: MessageBoxSyncOptions): number;
+}
+
+/**
+ * Guarded wrapper around `dialog.showMessageBoxSync`. On Win/Linux, invoking
+ * the dialog before `app.whenReady()` resolves is documented-undefined and
+ * can hang or no-op. When the app isn't ready, we write the message to
+ * stderr and return the caller's `cancelId` (or 0) — the boot-error log is
+ * already on disk so the user still has something to attach.
+ */
+export function showBootDialog(
+  appRef: BootDialogApp,
+  driver: BootDialogDriver,
+  options: MessageBoxSyncOptions,
+): number {
+  if (!appRef.isReady()) {
+    process.stderr.write(
+      `[boot-fallback] ${options.message}\nLog: ${options.detail ?? '(no detail)'}\n`,
+    );
+    return options.cancelId ?? 0;
+  }
+  return driver.showMessageBoxSync(options);
 }
