@@ -305,24 +305,28 @@ ${t('diagnostics.report.message')}: ${event.message}`}
               />
             </label>
 
-            <fieldset className="space-y-1.5" disabled={busy}>
+            <fieldset className="space-y-2.5" disabled={busy}>
               <Toggle
                 label={t('diagnostics.report.include.prompt')}
+                hint={t('diagnostics.report.include.promptHint')}
                 checked={include.prompt}
                 onChange={(v) => setInclude((p) => ({ ...p, prompt: v }))}
               />
               <Toggle
                 label={t('diagnostics.report.include.paths')}
+                hint={t('diagnostics.report.include.pathsHint')}
                 checked={include.paths}
                 onChange={(v) => setInclude((p) => ({ ...p, paths: v }))}
               />
               <Toggle
                 label={t('diagnostics.report.include.urls')}
+                hint={t('diagnostics.report.include.urlsHint')}
                 checked={include.urls}
                 onChange={(v) => setInclude((p) => ({ ...p, urls: v }))}
               />
               <Toggle
                 label={t('diagnostics.report.include.timeline')}
+                hint={t('diagnostics.report.include.timelineHint')}
                 checked={include.timeline}
                 onChange={(v) => setInclude((p) => ({ ...p, timeline: v }))}
               />
@@ -374,22 +378,31 @@ ${t('diagnostics.report.message')}: ${event.message}`}
 
 function Toggle({
   label,
+  hint,
   checked,
   onChange,
 }: {
   label: string;
+  hint?: string;
   checked: boolean;
   onChange: (v: boolean) => void;
 }) {
   return (
-    <label className="flex items-center gap-2 text-[var(--text-sm)] text-[var(--color-text-primary)] cursor-pointer">
+    <label className="flex items-start gap-2 text-[var(--text-sm)] text-[var(--color-text-primary)] cursor-pointer">
       <input
         type="checkbox"
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
-        className="h-4 w-4"
+        className="h-4 w-4 mt-[3px]"
       />
-      <span>{label}</span>
+      <span className="flex flex-col gap-0.5">
+        <span>{label}</span>
+        {hint ? (
+          <span className="text-[var(--text-xs)] text-[var(--color-text-secondary)] leading-[var(--leading-body)]">
+            {hint}
+          </span>
+        ) : null}
+      </span>
     </label>
   );
 }

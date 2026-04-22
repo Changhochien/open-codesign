@@ -773,7 +773,11 @@
         "prompt": "包含 prompt 正文",
         "paths": "包含文件路径",
         "urls": "包含 URL",
-        "timeline": "包含最近 60 秒操作记录"
+        "timeline": "包含最近 60 秒操作记录",
+        "promptHint": "包含你在会话中提交的 prompt 正文。",
+        "pathsHint": "包含本地文件路径（可能暴露用户名和目录结构）。",
+        "urlsHint": "包含你粘贴过的参考 URL。",
+        "timelineHint": "最近 60 秒的操作时间轴 — 只含动作名，不含内容。"
       },
       "disclaimer": "不会自动上传。诊断包已保存到下载文件夹，请手动附加到 GitHub issue。",
       "openIssue": "打开 issue",

@@ -1760,6 +1760,7 @@ function AdvancedTab() {
     generationTimeoutSec: 1200,
     checkForUpdatesOnStartup: true,
     dismissedUpdateVersion: '',
+    diagnosticsLastReadTs: 0,
   });
 
   useEffect(() => {

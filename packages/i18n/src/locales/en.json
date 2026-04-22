@@ -774,7 +774,11 @@
         "prompt": "Include prompt text",
         "paths": "Include file paths",
         "urls": "Include URLs",
-        "timeline": "Include 60 s action timeline"
+        "timeline": "Include 60 s action timeline",
+        "promptHint": "Includes the text of prompts you submitted during the session.",
+        "pathsHint": "Includes local file paths (can reveal your username / directory structure).",
+        "urlsHint": "Includes reference URLs you pasted.",
+        "timelineHint": "60-second activity log — actions only, no content."
       },
       "disclaimer": "Nothing is uploaded automatically. The diagnostic bundle is saved to your Downloads folder; attach it to the GitHub issue manually.",
       "openIssue": "Open issue",
