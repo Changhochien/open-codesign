@@ -47,7 +47,7 @@ vi.mock('zip-lib', async () => {
   };
 });
 
-import { registerDiagnosticsIpc, redactSensitiveTomlFields } from './diagnostics-ipc';
+import { redactSensitiveTomlFields, registerDiagnosticsIpc } from './diagnostics-ipc';
 import { initInMemoryDb, listDiagnosticEvents, recordDiagnosticEvent } from './snapshots-db';
 
 function invoke(channel: string, payload: unknown): unknown {

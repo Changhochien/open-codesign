@@ -50,9 +50,7 @@ describe('applyRedaction', () => {
       includePaths: false,
       includeUrls: false,
     });
-    expect(result).toBe(
-      'error: prompt: "<prompt omitted>" at <path omitted> — see <url omitted>',
-    );
+    expect(result).toBe('error: prompt: "<prompt omitted>" at <path omitted> — see <url omitted>');
   });
 
   it('honors include flags — passes input through untouched when all are on', () => {
